@@ -1,0 +1,2 @@
+1. This file should be somewhere like PROJECT_FOLDER/componentes/pocket_discord/NOTES.txt
+2. If you struggle to use this, you should use the template project I made. If it's not out yet, please join the Discord server in the README file.

@@ -1,0 +1,7 @@
+cert/
+keys.h
+*.wolflog
+*.wolflogv2
+*.bbv1
+config.json
+*.bbv2
