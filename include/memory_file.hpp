@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <vector>
 #include <mutex>
 #include <algorithm>
 
@@ -25,7 +26,7 @@ namespace LSW {
     namespace PocketDiscord {
 
         const std::string memory_path = mount_point + std::string("/memory/");
-        constexpr size_t memfile_tempbuf_size = 1536; // this is used in other places...
+        constexpr size_t memfile_tempbuf_size = 4096; // this is used in other places...
         constexpr size_t read_block_chunk_size = alloc_size_each; // from SD card
 
 
@@ -37,7 +38,8 @@ namespace LSW {
             FILE* fp = nullptr;
             size_t size_now_valid = 0;
 #ifndef LSW_MEMORYFILE_NOBUFFER
-            char tempbuf[memfile_tempbuf_size]{};
+            //char tempbuf[memfile_tempbuf_size]{};
+            std::vector<char> tempbuf;
 #endif
 
             void gen_new();

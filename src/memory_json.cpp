@@ -506,6 +506,13 @@ namespace LSW {
             : m_lim_beg(oth.m_lim_beg), m_lim_end(oth.m_lim_end), type(oth.type), memfp(oth.memfp), objs(std::move(oth.objs)), arrs(std::move(oth.arrs))
         {
         }
+        
+        void MemoryFileJSON::reset_and_reparse()
+        {
+            objs.clear();
+            arrs.clear();
+            parse();
+        }
 
         MemoryFileJSON MemoryFileJSON::operator[](const std::string& key) const
         {

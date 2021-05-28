@@ -222,77 +222,87 @@ namespace LSW {
         gateway_payload_structure::gateway_payload_structure(MemoryFile&& oth)
             : __fporig(oth), json(__fporig)
         {
-            if (oth.size() == 0) {
-                logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Empty MemoryFile?" << L::EL;
-                all_good = false;
-                return;
-            }
-
-            all_good = true;
-
-            // - - - - - - - OP CODE - - - - - - - //
-
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing OP code..." << L::EL;
-    #endif 
-
-            if (/*MemoryFileJSON*/ const auto it = json["op"]; !it.is_null()) {
-                int op_raw = it.as_int();
-                if (op_raw < 0 || op_raw > static_cast<int>(gateway_opcodes::_MAX)) {
-                    op = gateway_opcodes::UNKNOWN;
-                    all_good = false;
-                    logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Invalid OP code: " << op_raw << "." << L::EL;
+            for(size_t reparse = 0; reparse < 3; reparse++) {
+                if (reparse > 0) { // reparse?
+                    json.reset_and_reparse();
+                    logg << L::SL << Color::YELLOW << "[Gateway] PAYLOAD is trying to reset and re-parse [" << (reparse + 1) << "/3]" << L::EL;
                 }
-                else op = static_cast<gateway_opcodes>(op_raw);
-            }
-            else logg << L::SL << Color::RED << "[Gateway] OP code is empty?!" << L::EL;
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) * OP=" << static_cast<int>(op) << L::EL;
-    #endif 
+
+                if (oth.size() == 0) {
+                    logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Empty MemoryFile?" << L::EL;
+                    all_good = false;
+                    return;
+                }
+
+                all_good = true;
+
+                // - - - - - - - OP CODE - - - - - - - //
+
+ #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing OP code..." << L::EL;
+ #endif 
+
+                if (/*MemoryFileJSON*/ const auto it = json["op"]; !it.is_null()) {
+                    int op_raw = it.as_int();
+                    if (op_raw < 0 || op_raw > static_cast<int>(gateway_opcodes::_MAX)) {
+                        op = gateway_opcodes::UNKNOWN;
+                        all_good = false;
+                        logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Invalid OP code: " << op_raw << "." << L::EL;
+                        continue;
+                    }
+                    else{
+                        op = static_cast<gateway_opcodes>(op_raw);
+                    }
+                }
+                if (op == gateway_opcodes::UNKNOWN){
+                    logg << L::SL << Color::RED << "[Gateway] OP code is UNKNOWN?! Retrying..." << L::EL;
+                    continue;
+                } 
+ #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) * OP=" << static_cast<int>(op) << L::EL;
+ #endif 
 
             // - - - - - - - SEQ NUMBER - - - - - - - //
 
 
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing SEQ NUMBER..." << L::EL;
-    #endif 
+ #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing SEQ NUMBER..." << L::EL;
+#endif 
 
-            if (/*MemoryFileJSON*/ const auto it = json["s"]; !it.is_null()) {
-                s = static_cast<long long>(it.as_llu());
-            }
+                if (/*MemoryFileJSON*/ const auto it = json["s"]; !it.is_null()) {
+                    s = static_cast<long long>(it.as_llu());
+                }
 
             // - - - - - - - evenT NUMBER - - - - - - - //
 
 
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing evenT..." << L::EL;
-    #endif 
+#ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Parsing evenT..." << L::EL;
+#endif 
 
-            if (/*MemoryFileJSON*/ const auto it = json["t"]; !it.is_null()) {
-                t = string_to_gateway_events(it.as_string());
+                if (/*MemoryFileJSON*/ const auto it = json["t"]; !it.is_null()) {
+                    t = string_to_gateway_events(it.as_string());
 
-                if (t == gateway_events::UNKNOWN){
-                    all_good = false;
-                    logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Invalid EVENT code (" << it.as_string() << ")." << L::EL;
+                    if (t == gateway_events::UNKNOWN){
+                        all_good = false;
+                        logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Invalid EVENT code (" << it.as_string() << ")." << L::EL;
+                    }
                 }
-            }
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) * EVENTNUM=" << static_cast<int>(t) << L::EL;
-    #endif 
+#ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) * EVENTNUM=" << static_cast<int>(t) << L::EL;
+#endif 
             
+                if (all_good) {
+                    oth.clear();
+                }
 
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Moving FP..." << L::EL;
-    #endif 
-            if (all_good) {
-                oth.clear();
+/*
+#ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Good? " << (all_good ? "Y" : "N") << L::EL;
+#endif 
+    */
+                return;
             }
-
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Good? " << (all_good ? "Y" : "N") << L::EL;
-    #endif 
-
-            return;
         }
 
 
@@ -528,9 +538,9 @@ namespace LSW {
                     .disable_auto_reconnect = true,
                     .task_stack = gateway_stack_size,
                     .buffer_size = 512,
-            #ifndef CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY
+#ifndef CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY
                     .cert_pem = (const char*)gateway_crt
-            #endif
+#endif
             };
 
             logg << L::SL << Color::GREEN << "[Gateway] Initializing client..." << L::EL;
@@ -681,13 +691,13 @@ namespace LSW {
 
             try{
 
-    #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+ #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
             logg << L::SL << Color::BRIGHT_GRAY << "[Gateway] Raw event: (event=" << event_id 
                                                                         << ", op_code=" << static_cast<int>(data->op_code)
                                                                         << ", payload_len=" << data->payload_len 
                                                                         << ", data_len=" << data->data_len
                                                                         << ", payload_offset=" << data->payload_offset << ")" << L::EL;
-    #endif      
+ #endif      
 
                 if (unique_cfg->no_gateway_please){
                     switch(event_id){

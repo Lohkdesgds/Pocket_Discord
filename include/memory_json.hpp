@@ -140,6 +140,8 @@ namespace LSW {
             MemoryFileJSON(const MemoryFileJSON&) = delete;
             MemoryFileJSON(MemoryFileJSON&&);
 
+            void reset_and_reparse();
+
             MemoryFileJSON operator[](const std::string&) const;
             MemoryFileJSON operator[](const size_t&) const;
 

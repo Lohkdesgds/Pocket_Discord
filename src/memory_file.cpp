@@ -18,6 +18,8 @@ namespace LSW {
                     if (!fp) logg << L::SL << Color::YELLOW << "[MemoryFile] MemoryFile failed to open once [" << (u + 1) << "/3]" << L::EL;
                 }
 
+                tempbuf.resize(memfile_tempbuf_size, '\0');
+
                 if (fpcount > 100) fpcount = 0;
                 if (++fpopened >= (files_open_max - 1)) {
                     logg << L::SL << Color::YELLOW << "[MemoryFile] MemoryFiles are close to the limit!" << L::EL;
@@ -34,6 +36,7 @@ namespace LSW {
             if (fp) {
                 fclose(fp);
                 fp = nullptr;
+                tempbuf.clear();
                 std::lock_guard<std::mutex> lucky(safemtx);
                 if (fpopened) fpopened--;
             }
@@ -68,10 +71,11 @@ namespace LSW {
             fp = mf.fp;
 
     #ifndef LSW_MEMORYFILE_NOBUFFER
-            for (size_t p = 0; p < memfile_tempbuf_size; p++) {
+            /*for (size_t p = 0; p < memfile_tempbuf_size; p++) {
                 tempbuf[p] = mf.tempbuf[p];
                 mf.tempbuf[p] = '\0';
-            }
+            }*/
+            tempbuf = std::move(mf.tempbuf);
     #endif
 
             size_now_valid = mf.size_now_valid;
@@ -91,10 +95,11 @@ namespace LSW {
             fp = mf.fp;
 
     #ifndef LSW_MEMORYFILE_NOBUFFER
-            for (size_t p = 0; p < memfile_tempbuf_size; p++) {
+            /*for (size_t p = 0; p < memfile_tempbuf_size; p++) {
                 tempbuf[p] = mf.tempbuf[p];
                 mf.tempbuf[p] = '\0';
-            }
+            }*/
+            tempbuf = std::move(mf.tempbuf);
     #endif
 
             size_now_valid = mf.size_now_valid;
