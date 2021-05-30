@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <memory>
 #include <algorithm>
 
 #include "printer.hpp"
@@ -27,37 +28,41 @@ namespace LSW {
 
         const std::string memory_path = mount_point + std::string("/memory/");
         constexpr size_t memfile_tempbuf_size = 4096; // this is used in other places...
+        constexpr size_t memfile_blocks_copy = 256; // bytes
         constexpr size_t read_block_chunk_size = alloc_size_each; // from SD card
+        constexpr unsigned memfile_max_file_number = 200;
 
 
         class MemoryFile {
-            static unsigned fpcount;
-            static unsigned fpopened;
-            static std::mutex safemtx;
+            struct _shared {
+                unsigned m_count = 0;
+                std::mutex mtx;
 
-            FILE* fp = nullptr;
-            size_t size_now_valid = 0;
-#ifndef LSW_MEMORYFILE_NOBUFFER
-            //char tempbuf[memfile_tempbuf_size]{};
-            std::vector<char> tempbuf;
-#endif
+                unsigned request();
+            };
 
-            void gen_new();
-            void close_fp();
-            void check_gen_new(); // if null, gen_new
+            static _shared s_shared;
+
+            std::unique_ptr<FILE, std::function<void(FILE*)>> m_fp;
+            size_t m_size_now = 0;
+            size_t m_ram_size = memfile_tempbuf_size;
+            std::vector<char> m_buf;
+
+            void set_size(const size_t);
+            void write_noalloc(const char*, size_t, const size_t); // should not alloc. (array, size, offset)
+            std::string read_noalloc(size_t, const size_t) const; // (size, offset)
+
+            size_t max_ram() const;
         public:
-            MemoryFile();
-            ~MemoryFile();
-
+            MemoryFile(const size_t = memfile_tempbuf_size);
             MemoryFile(const MemoryFile&);
             MemoryFile(MemoryFile&&) noexcept;
+            MemoryFile(const std::string&);
             void operator=(const MemoryFile&);
             void operator=(MemoryFile&&) noexcept;
 
             bool operator==(const MemoryFile&) const;
             bool operator!=(const MemoryFile&) const;
-
-            unsigned files_open() const;
 
             size_t size() const;
             size_t length() const;
@@ -82,13 +87,8 @@ namespace LSW {
             void pop_back();
             void swap(MemoryFile&&);
 
-            size_t find_after(const char, const size_t) const;
-            size_t find_before(const char, const size_t) const;
-            bool find_block(size_t&, size_t&, const size_t, const size_t, const char, const char) const;
-            // min, max (if all, set this as size()), '{', '}' (example)
-
             std::string substr(const size_t = 0, const size_t = static_cast<size_t>(-1)) const;
-        };        
+        };
 
     }
 }

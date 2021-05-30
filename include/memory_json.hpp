@@ -136,7 +136,7 @@ namespace LSW {
 
             MemoryFileJSON(const MemoryFile&, const size_t, const size_t, const json_type);
         public:
-            MemoryFileJSON(const MemoryFile&); // parse
+            MemoryFileJSON(const MemoryFile&, const bool = true); // parse?
             MemoryFileJSON(const MemoryFileJSON&) = delete;
             MemoryFileJSON(MemoryFileJSON&&);
 

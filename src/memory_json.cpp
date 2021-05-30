@@ -268,8 +268,21 @@ namespace LSW {
                 return json_type::STRING;
             }
             else if (at_right - at_left > 5) {
+                const std::string temp = fp.substr(at_left, 4);
+
                 if (left == '{' && right == '}') return json_type::OBJECT;
                 else if (left == '[' && right == ']') return json_type::ARRAY;
+                else if (temp == "null") {
+                    return json_type::EMPTY;
+                }
+                else if (left == '{'/* || right == '}'*/) {
+                    logg << L::SL << Color::YELLOW << "[MemoryJSON] Warn: weird object detected. Errors may happen." << L::EL;
+                    return json_type::OBJECT;
+                }
+                else if (right == '['/* || right == ']'*/) {
+                    logg << L::SL << Color::YELLOW << "[MemoryJSON] Warn: weird array detected. Errors may happen." << L::EL;
+                    return json_type::ARRAY;
+                }
                 else return json_type::NUMBER;
             }
             else {
@@ -389,11 +402,12 @@ namespace LSW {
                 last_object_starts[1] = last_object_starts[0];
                 last_object_starts[0] = val;
             };
-            const auto fix_object_and_push = [&]() {
+            const auto fix_object_and_push = [&]() -> bool {
 
                 if (current_obj.key.empty()) {
-                    logg << L::SL << Color::RED << "[MemoryJSON] Failed: value with no key." << L::EL;
-                    throw std::runtime_error("value with no key! Invalid JSON");
+                    logg << L::SL << Color::RED << "[MemoryJSON] Failed: value with no key. Aborting new objects/array..." << L::EL;
+                    //throw std::runtime_error("value with no key! Invalid JSON");
+                    return false;
                 }
 
                 while (last_object_starts[1] < last_object_starts[0] && (std::find(useless_for_json.begin(), useless_for_json.end(), memfp[last_object_starts[1]]) != useless_for_json.end()))
@@ -407,6 +421,8 @@ namespace LSW {
 
                 objs.push_back(std::move(current_obj));
                 current_obj.key.clear();
+
+                return true;
 
                 /*std::cout
                     << "\nkey:  '" << objs.back().key << "'"
@@ -439,7 +455,7 @@ namespace LSW {
                 case ',':
                     if (depth == 1 && !in_quote) {
                         object_add_marker(curr);
-                        fix_object_and_push();
+                        if (!fix_object_and_push()) return;
                         //std::cout << "val: '" << memfp.substr(last_object_starts[1], last_object_starts[0] - last_object_starts[1]) << "'" << std::endl;
                         has_key_pending = false;
                     }
@@ -483,10 +499,10 @@ namespace LSW {
                 break;
             default:
                 break;
-            /*default: // not an error lmao
-                logg << L::SL << Color::RED << "[MemoryJSON] Failed: invalid type to parse as object." << L::EL;
-                throw std::runtime_error("Invalid JSON type to parse");
-                break;*/
+                /*default: // not an error lmao
+                    logg << L::SL << Color::RED << "[MemoryJSON] Failed: invalid type to parse as object." << L::EL;
+                    throw std::runtime_error("Invalid JSON type to parse");
+                    break;*/
             }
         }
 
@@ -496,17 +512,17 @@ namespace LSW {
             parse();
         }
 
-        MemoryFileJSON::MemoryFileJSON(const MemoryFile& fp)
+        MemoryFileJSON::MemoryFileJSON(const MemoryFile& fp, const bool autoparse)
             : m_lim_beg(0), m_lim_end(static_cast<size_t>(-1)), type(get_type_on(fp, m_lim_beg, (m_lim_end == static_cast<size_t>(-1) ? fp.size() : m_lim_end))), memfp(fp)
         {
-            parse();
+            if (autoparse) parse();
         }
 
         MemoryFileJSON::MemoryFileJSON(MemoryFileJSON&& oth)
             : m_lim_beg(oth.m_lim_beg), m_lim_end(oth.m_lim_end), type(oth.type), memfp(oth.memfp), objs(std::move(oth.objs)), arrs(std::move(oth.arrs))
         {
         }
-        
+
         void MemoryFileJSON::reset_and_reparse()
         {
             objs.clear();
@@ -737,5 +753,6 @@ namespace LSW {
             }
             return out;
         }
+
     }
 }

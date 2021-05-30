@@ -3,155 +3,209 @@
 namespace LSW {
     namespace PocketDiscord {
 
-        unsigned MemoryFile::fpcount = 0;
-        unsigned MemoryFile::fpopened = 0;
-        std::mutex MemoryFile::safemtx;
+        MemoryFile::_shared MemoryFile::s_shared;
 
-        void MemoryFile::gen_new()
+        unsigned MemoryFile::_shared::request()
         {
-            close_fp();
-            {
-                std::lock_guard<std::mutex> lucky(safemtx);
+            std::lock_guard<std::mutex> l(mtx);
+            m_count = (m_count + 1) % memfile_max_file_number;
+            return m_count;
+        }
 
-                for (int u = 0; u < 3 && !fp; u++) {
-                    fp = fopen((memory_path + std::to_string(fpcount++)).c_str(), "wb+");
-                    if (!fp) logg << L::SL << Color::YELLOW << "[MemoryFile] MemoryFile failed to open once [" << (u + 1) << "/3]" << L::EL;
+        void MemoryFile::set_size(const size_t max_len)
+        {
+            if (max_len > m_ram_size) {
+                if (!m_fp) {
+                    m_fp = std::move(std::unique_ptr<FILE, std::function<void(FILE*)>>([&] {
+                        std::string p = memory_path + std::to_string(s_shared.request());
+                        FILE* f = nullptr;
+                        for (size_t errs = 0; !f; errs++) {
+                            if (errs >= 5) {
+                                logg << L::SL << Color::RED << "[MemoryFile] Failed to open file! Fatal error!" << L::EL;
+                                throw std::runtime_error("[MemoryFile] Can't open new file for buffering");
+                            }
+                            f = fopen(p.c_str(), "wb+");
+                        }
+                        return f;
+                        }(), [](FILE* f) { fclose(f); }));
                 }
+            }
+            else if (m_fp) {
+                m_fp.reset();
+            }
 
-                tempbuf.resize(memfile_tempbuf_size, '\0');
+            if (max_len > 0) {
+                const size_t max_for_ram = max_len > max_ram() ? max_ram() : max_len;
+                m_buf.resize(max_for_ram);
+            }
+            else m_buf.clear();
 
-                if (fpcount > 100) fpcount = 0;
-                if (++fpopened >= (files_open_max - 1)) {
-                    logg << L::SL << Color::YELLOW << "[MemoryFile] MemoryFiles are close to the limit!" << L::EL;
+            m_size_now = max_len;
+        }
+
+        void MemoryFile::write_noalloc(const char* ch, size_t siz, const size_t off)
+        {
+            /*if (off + siz > max_ram() && m_fp.get()) fseek(m_fp.get(), 0, SEEK_SET);
+
+            for (size_t p = 0; p < siz; p++) {
+                const size_t pos = p + off;
+                if (pos >= m_size_now) break;
+                if (pos < max_ram()) m_buf[pos] = ch[p];
+                else fwrite(ch + p, sizeof(char), 1, m_fp.get());
+            }*/
+
+            size_t writable_ram = (max_ram() > off) ? (max_ram() - off) : 0;
+            if (writable_ram > siz) writable_ram = siz;
+
+            for (size_t p = 0; p < writable_ram; p++) m_buf[p + off] = ch[p];
+            siz -= writable_ram;
+
+            if (siz > 0) fseek(m_fp.get(), static_cast<long>((off > max_ram() ? (off - max_ram()) : 0)), SEEK_SET);
+
+            unsigned zeros = 0;
+            while (siz > 0) {
+                const size_t to_write = siz > memfile_blocks_copy ? memfile_blocks_copy : siz;
+                size_t _writt = 0;
+                while ((_writt = fwrite(ch + writable_ram, sizeof(char), to_write, m_fp.get())) == 0) {
+                    if (++zeros >= 10) {
+                        logg << L::SL << Color::RED << "[MemoryFile] Failed to write 10 times, leaving this as is." << L::EL;
+                        return;
+                    }
                 }
-            }
-            if (!fp) {
-                logg << L::SL << Color::RED << "[MemoryFile] Failed to open temporary file!" << L::EL;
-                throw std::runtime_error("[MemoryFile] Failed to open temporary file! At file N=" + std::to_string(fpcount) + " (resets at 100). Aborting.");
+                if (_writt <= siz) siz -= _writt;
+                else siz = 0;
             }
         }
 
-        void MemoryFile::close_fp()
+        std::string MemoryFile::read_noalloc(size_t siz, const size_t off) const
         {
-            if (fp) {
-                fclose(fp);
-                fp = nullptr;
-                tempbuf.clear();
-                std::lock_guard<std::mutex> lucky(safemtx);
-                if (fpopened) fpopened--;
+            /*std::string cpy;
+            for (size_t p = 0; p < siz; p++) {
+                if (p + off >= m_size_now) break;
+                cpy += at(off + p);
+            }
+            return cpy;*/
+
+            if (off + siz > m_size_now)
+                siz = m_size_now - off;
+
+            std::string out;
+
+            size_t readable_ram = (off > max_ram()) ? 0 : (max_ram() - off);
+            if (readable_ram > siz) readable_ram = siz;
+
+            if (readable_ram > 0) out = std::string(m_buf.begin() + off, m_buf.begin() + off + readable_ram);
+            siz -= readable_ram;
+
+            if (siz > 0) fseek(m_fp.get(), static_cast<long>((off > max_ram() ? (off - max_ram()) : 0)), SEEK_SET);
+
+            unsigned zeros = 0;
+            for (size_t p = 0; p < siz;) {
+                char _temp[memfile_blocks_copy];
+                const size_t to_read = siz > memfile_blocks_copy ? memfile_blocks_copy : siz;
+                size_t _read = 0;
+
+                while ((_read = fread(_temp, sizeof(char), to_read, m_fp.get())) == 0) {
+                    if (++zeros >= 10) {
+                        logg << L::SL << Color::RED << "[MemoryFile] Failed to read 10 times, returning what was available right now." << L::EL;
+                        return out;
+                    }
+
+                }
+                out.append(_temp, _read);
+                p += _read;
+            }
+
+            return out;
+        }
+
+        size_t MemoryFile::max_ram() const
+        {
+            return m_ram_size;
+        }
+
+        MemoryFile::MemoryFile(const size_t ramsiz)
+            : m_ram_size(ramsiz)
+        {
+        }
+
+        MemoryFile::MemoryFile(const MemoryFile& oth)
+        {
+            set_size(oth.size());
+            for (size_t p = 0; p < oth.size(); p += memfile_blocks_copy) {
+                const std::string _str = oth.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p);
             }
         }
 
-        void MemoryFile::check_gen_new()
+        MemoryFile::MemoryFile(MemoryFile&& oth) noexcept
+            : m_fp(std::move(oth.m_fp)), m_size_now(oth.m_size_now), m_ram_size(oth.m_ram_size), m_buf(std::move(oth.m_buf))
         {
-            if (!fp) gen_new();
+            oth.set_size(0);
         }
 
-        MemoryFile::MemoryFile()
+        MemoryFile::MemoryFile(const std::string& str)
         {
-            //gen_new();
+            *this = str;
         }
 
-        MemoryFile::~MemoryFile()
+        void MemoryFile::operator=(const MemoryFile& oth)
         {
-            if (fp) {
-                close_fp();
+            set_size(oth.size());
+            for (size_t p = 0; p < oth.size(); p += memfile_blocks_copy) {
+                const std::string _str = oth.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p);
             }
         }
 
-        MemoryFile::MemoryFile(const MemoryFile& mf)
+        void MemoryFile::operator=(MemoryFile&& oth) noexcept
         {
-            check_gen_new();
-            for (size_t p = 0; p < mf.size(); p++) push_back(mf[p]);
-            size_now_valid = mf.size_now_valid;
-        }
+            m_fp = std::move(oth.m_fp);
+            m_size_now = oth.m_size_now;
+            m_ram_size = oth.m_ram_size;
+            m_buf = std::move(oth.m_buf);
 
-        MemoryFile::MemoryFile(MemoryFile&& mf) noexcept
-        {
-            fp = mf.fp;
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            /*for (size_t p = 0; p < memfile_tempbuf_size; p++) {
-                tempbuf[p] = mf.tempbuf[p];
-                mf.tempbuf[p] = '\0';
-            }*/
-            tempbuf = std::move(mf.tempbuf);
-    #endif
-
-            size_now_valid = mf.size_now_valid;
-            mf.size_now_valid = 0;
-            mf.fp = nullptr;
-        }
-
-        void MemoryFile::operator=(const MemoryFile& mf)
-        {
-            check_gen_new();
-            for (size_t p = 0; p < mf.size(); p++) push_back(mf[p]);
-            size_now_valid = mf.size_now_valid;
-        }
-
-        void MemoryFile::operator=(MemoryFile&& mf) noexcept
-        {
-            fp = mf.fp;
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            /*for (size_t p = 0; p < memfile_tempbuf_size; p++) {
-                tempbuf[p] = mf.tempbuf[p];
-                mf.tempbuf[p] = '\0';
-            }*/
-            tempbuf = std::move(mf.tempbuf);
-    #endif
-
-            size_now_valid = mf.size_now_valid;
-            mf.size_now_valid = 0;
-            mf.fp = nullptr;
+            oth.set_size(0);
         }
 
         bool MemoryFile::operator==(const MemoryFile& oth) const
         {
-            return fp == oth.fp;
+            return m_fp.get() == oth.m_fp.get() && m_size_now == oth.m_size_now && m_ram_size == oth.m_ram_size && m_buf == oth.m_buf;
         }
 
         bool MemoryFile::operator!=(const MemoryFile& oth) const
         {
-            return fp != oth.fp;
-        }
-
-        unsigned MemoryFile::files_open() const
-        {
-            return fpopened;
+            return !(*this == oth);
         }
 
         size_t MemoryFile::size() const
         {
-            return fp ? size_now_valid : 0;
+            return m_size_now;
         }
 
         size_t MemoryFile::length() const
         {
-            return size();
+            return m_size_now;
         }
 
-        void MemoryFile::resize(const size_t off)
+        void MemoryFile::resize(const size_t new_lim)
         {
-            check_gen_new();
-            size_now_valid = off;
+            set_size(new_lim);
         }
 
-        void MemoryFile::reserve(const size_t siz)
+        void MemoryFile::reserve(const size_t new_lim)
         {
-            resize(siz); // does check_gen_new();
+            set_size(new_lim);
         }
 
         void MemoryFile::clear()
         {
-            size_now_valid = 0;
-            close_fp();
+            set_size(0);
         }
 
         bool MemoryFile::empty() const
         {
-            return fp == nullptr || size_now_valid == 0;
+            return m_size_now == 0;
         }
 
         bool MemoryFile::valid() const
@@ -161,323 +215,121 @@ namespace LSW {
 
         char MemoryFile::operator[](const size_t at) const
         {
-            if (!fp) return '\0';
-            if (at >= size_now_valid) return '\0';
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            if (at < memfile_tempbuf_size) return tempbuf[at];
-            fseek(fp, static_cast<long>(at - memfile_tempbuf_size), SEEK_SET);
-    #else
-            fseek(fp, static_cast<long>(at), SEEK_SET);
-    #endif
-
-            int res = fgetc(fp);
-            if (res > 0) return static_cast<char>(res);
+            if (at >= m_size_now) return '\0';
+            if (at < max_ram()) return m_buf[at];
+            fseek(m_fp.get(), static_cast<long>(at - max_ram()), SEEK_SET);
+            int ch = fgetc(m_fp.get());
+            if (ch > 0) return ch;
             return '\0';
         }
 
         char MemoryFile::at(const size_t at) const
         {
-            if (!fp) return '\0';
-            if (at >= size_now_valid) return '\0';
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            if (at < memfile_tempbuf_size) return tempbuf[at];
-            fseek(fp, static_cast<long>(at - memfile_tempbuf_size), SEEK_SET);
-    #else
-            fseek(fp, static_cast<long>(at), SEEK_SET);
-    #endif
-
-            int res = fgetc(fp);
-            if (res > 0) return static_cast<char>(res);
+            if (at >= m_size_now) return '\0';
+            if (at < max_ram()) return m_buf[at];
+            fseek(m_fp.get(), static_cast<long>(at - max_ram()), SEEK_SET);
+            int ch = fgetc(m_fp.get());
+            if (ch > 0) return ch;
             return '\0';
         }
 
         char MemoryFile::back() const
         {
-            if (!fp) return '\0';
-            if (size_now_valid == 0) return '\0';
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            if (size_now_valid < memfile_tempbuf_size) return tempbuf[size_now_valid - 1];
-            fseek(fp, static_cast<long>(size_now_valid - memfile_tempbuf_size - 1), SEEK_SET);
-    #else
-            fseek(fp, static_cast<long>(size_now_valid - 1), SEEK_SET);
-    #endif
-
-            int res = fgetc(fp);
-            if (res > 0) return static_cast<char>(res);
-            return '\0';
+            if (m_size_now == 0) return '\0';
+            return at(m_size_now - 1);
         }
 
         char MemoryFile::front() const
         {
-            if (!fp) return '\0';
-            if (size_now_valid == 0) return '\0';
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            return tempbuf[0];
-    #else
-            fseek(fp, 0, SEEK_SET);
-            int res = fgetc(fp);
-            if (res > 0) return static_cast<char>(res);
-            return '\0';
-    #endif
+            return at(0);
         }
 
         void MemoryFile::operator=(const std::string& str)
         {
-            check_gen_new();
-            size_now_valid = str.length();
+            set_size(str.size());
 
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            for (size_t p = 0; p < memfile_tempbuf_size && p < size_now_valid; p++) tempbuf[p] = str[p];
-            if (size_now_valid > memfile_tempbuf_size) {
-                fseek(fp, 0, SEEK_SET);
-                int errs = 0;
-                for (size_t p = 0; p < str.length() - memfile_tempbuf_size;) {
-                    size_t wrt = fwrite(str.data() + memfile_tempbuf_size + p, sizeof(char), str.length() - memfile_tempbuf_size - p, fp);
-                    if (wrt == 0) {
-                        if (++errs > 3) {
-    #ifndef LSW_DISCARD_READWRITE_ERRORS
-                            logg << L::SL << Color::YELLOW << "[MemoryFile] Failed to write 3 times, leaving this as is." << L::EL;
-    #endif
-                            break;
-                        }
-                    }
-                    else { errs = 0; p += wrt; }
-                }
+            for (size_t p = 0; p < str.size(); p += memfile_blocks_copy) {
+                const std::string _str = str.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p);
             }
-    #else
-            fseek(fp, 0, SEEK_SET);
-            int errs = 0;
-            for (size_t p = 0; p < str.length();) {
-                size_t wrt = fwrite(str.data() + p, sizeof(char), str.length() - p, fp);
-                if (wrt == 0) {
-                    if (++errs > 3) {
-    #ifndef LSW_DISCARD_READWRITE_ERRORS
-                        logg << L::SL << Color::YELLOW << "[MemoryFile] Failed to write 3 times, leaving this as is." << L::EL;
-    #endif
-                        break;
-                    }
-            }
-                else { errs = 0; p += wrt; }
         }
-    #endif
-    }
 
         void MemoryFile::operator+=(const std::string& str)
         {
-            check_gen_new();
+            const size_t offset = m_size_now;
+            set_size(m_size_now + str.size());
 
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            size_t str_pos = 0;
-
-            for (size_t p = size_now_valid; p < memfile_tempbuf_size && str_pos < str.length(); p++) tempbuf[p] = str[str_pos++];
-
-            if (str_pos < str.length()) {
-                fseek(fp, static_cast<long>(size_now_valid - memfile_tempbuf_size), SEEK_SET);
-                int errs = 0;
-                for (size_t p = 0; p < str.length() - str_pos;) {
-                    size_t wrt = fwrite(str.data() + str_pos + p, sizeof(char), str.length() - str_pos - p, fp);
-                    if (wrt == 0) {
-                        if (++errs > 3) {
-    #ifndef LSW_DISCARD_READWRITE_ERRORS
-                            logg << L::SL << Color::YELLOW << "[MemoryFile] Failed to write 3 times, leaving this as is." << L::EL;
-    #endif
-                            break;
-                        }
-                    }
-                    else { errs = 0; p += wrt; }
-                }
+            for (size_t p = 0; p < str.size(); p += memfile_blocks_copy) {
+                const std::string _str = str.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p + offset);
             }
-    #else
-            fseek(fp, static_cast<long>(size_now_valid), SEEK_SET);
-
-            int errs = 0;
-            for (size_t p = 0; p < str.length();) {
-                size_t wrt = fwrite(str.data() + p, sizeof(char), str.length() - p, fp);
-                if (wrt == 0) {
-                    if (++errs > 3) {
-    #ifndef LSW_DISCARD_READWRITE_ERRORS
-                        logg << L::SL << Color::YELLOW << "[MemoryFile] Failed to write 3 times, leaving this as is." << L::EL;
-    #endif
-                        break;
-                    }
-                }
-                else { errs = 0; p += wrt; }
-            }
-    #endif
-
-            size_now_valid += str.length();
-                        }
+        }
 
         void MemoryFile::append(const std::string& str)
         {
-            *this += str;
+            const size_t offset = m_size_now;
+            set_size(m_size_now + str.size());
+
+            for (size_t p = 0; p < str.size(); p += memfile_blocks_copy) {
+                const std::string _str = str.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p + offset);
+            }
         }
 
-        void MemoryFile::append(const char* buf, const size_t siz)
+        void MemoryFile::append(const char* str, const size_t siz)
         {
-            std::string str(buf, siz);
-            *this += str;
+            const size_t offset = m_size_now;
+            set_size(m_size_now + siz);
+
+            for (size_t p = 0; p < siz; p += memfile_blocks_copy) {
+                const size_t curr_siz = (((siz - p) < memfile_blocks_copy) ? (siz - p) : memfile_blocks_copy);
+                write_noalloc(str + p, curr_siz, p + offset);
+            }
         }
 
         void MemoryFile::push_back(const char ch)
         {
-            check_gen_new();
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            if (size_now_valid < memfile_tempbuf_size) {
-                tempbuf[size_now_valid++] = ch;
-                return;
-            }
-            fseek(fp, static_cast<long>(size_now_valid - memfile_tempbuf_size), SEEK_SET);
-            fputc(ch, fp);
-    #else
-            fseek(fp, static_cast<long>(size_now_valid), SEEK_SET);
-            fputc(ch, fp);
-    #endif
-
-            size_now_valid++;
-                    }
+            const size_t pos = m_size_now;
+            set_size(m_size_now + 1);
+            write_noalloc(&ch, 1, pos);
+        }
 
         void MemoryFile::assign(const std::string& str)
         {
-            *this = str;
+            set_size(str.size());
+
+            for (size_t p = 0; p < str.size(); p += memfile_blocks_copy) {
+                const std::string _str = str.substr(p, memfile_blocks_copy);
+                write_noalloc(_str.data(), _str.size(), p);
+            }
         }
 
-        void MemoryFile::assign(const char* buf, const size_t siz)
+        void MemoryFile::assign(const char* str, const size_t siz)
         {
-            std::string str(buf, siz);
-            *this = str;
+            set_size(siz);
+
+            for (size_t p = 0; p < siz;) {
+                const size_t curr_siz = (((siz - p) < memfile_blocks_copy) ? (siz - p) : memfile_blocks_copy);
+                write_noalloc(str + p, curr_siz, p);
+                p += curr_siz;
+            }
         }
 
         void MemoryFile::pop_back()
         {
-            if (size_now_valid) size_now_valid--;
+            if (m_size_now > 1) set_size(m_size_now - 1);
         }
 
-        void MemoryFile::swap(MemoryFile&& mf)
+        void MemoryFile::swap(MemoryFile&& oth)
         {
-            FILE* _temp = fp;
-            size_t _siz = size_now_valid;
-
-            fp = mf.fp;
-            size_now_valid = mf.size_now_valid;
-
-            mf.fp = _temp;
-            mf.size_now_valid = _siz;
-
-    #ifndef LSW_MEMORYFILE_NOBUFFER
-            for (size_t p = 0; p < memfile_tempbuf_size; p++) {
-                char _temp_cpy = tempbuf[p];
-                tempbuf[p] = mf.tempbuf[p];
-                mf.tempbuf[p] = _temp_cpy;
-            }
-    #endif
-        }
-
-        size_t MemoryFile::find_after(const char ch, const size_t aft) const
-        {
-            if (!fp) return static_cast<size_t>(-1);
-            if (aft > size_now_valid) return static_cast<size_t>(-1);
-            for (size_t p = aft; p < size_now_valid; p++) {
-                if (at(p) == ch) return p;
-            }
-            return static_cast<size_t>(-1);
-        }
-
-        size_t MemoryFile::find_before(const char ch, const size_t bef) const
-        {
-            if (!fp) return static_cast<size_t>(-1);
-            if (bef > size_now_valid || bef == 0) return static_cast<size_t>(-1);
-            for (size_t p = bef; p > 0; p--) {
-                if (at(p) == ch && (p == 0 || at(p-1) != '\\')) return p;
-            }
-            if (at(0) == ch) return 0;
-            return static_cast<size_t>(-1);
-        }
-
-        bool MemoryFile::find_block(size_t& start, size_t& endd, const size_t beg, const size_t lim, const char str, const char enf) const
-        {
-            const size_t real_lim = lim > size() ? size() : lim;//lim >= m_end ? (m_end > memfp.size() ? memfp.size() : m_end) : lim;
-            if (real_lim <= beg) return false;
-
-            int points = 0;
-            bool block_ch = false; // this thing: backslash
-            for (size_t p = beg; p < real_lim; p++) {
-
-                char att = at(p);
-
-                if (att == '\\') {
-                    block_ch = true;
-                    continue;
-                }
-                else if (block_ch) {
-                    block_ch = false;
-                    continue;
-                }
-
-                if (enf == '\0' && att == str) { // find first case only
-                    endd = p;
-                    start = beg;
-                    return true;
-                }
-                if (str == enf && points > 0 && att == str) { // at least one, so like "string" has 2 cases
-                    endd = p;
-                    return true;
-                }
-                else if (att == str) {
-                    if (points++ == 0) start = p;
-                }
-                else if (att == enf) {
-                    if (--points == 0) {
-                        endd = p;
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            MemoryFile _temp = std::move(*this);
+            *this = std::move(oth);
+            oth = std::move(_temp);
         }
 
         std::string MemoryFile::substr(const size_t beg, const size_t siz) const
         {
-            if (!fp) return "";
-
-            const size_t totallen = (siz == static_cast<size_t>(-1)) ? size_now_valid : (((siz > size_now_valid) || ((siz + beg) > size_now_valid)) ? size_now_valid : (siz));
-
-            std::string res;
-            res.resize(totallen);
-
-            // Here I was trying something faster, but right now it's better "perfect" than "a little faster".
-//#ifndef LSW_MEMORYFILE_NOBUFFER
-            for (size_t p = 0; p < totallen; p++) res[p] = at(p + beg);
-/*#else
-            int errs = 0;
-            fseek(fp, static_cast<long>(beg), SEEK_SET);
-
-            for (size_t total = 0; total < totallen;)
-            {
-                size_t read_curr = ((totallen - total) > read_block_chunk_size) ? read_block_chunk_size : (totallen - total);
-                int read_now = fread(res.data() + total, sizeof(char), read_curr, fp);
-                if (read_now <= 0) { // go with what you have (this may try to read out of bounds anyway)
-                    if (++errs > 2) {
-#ifndef LSW_DISCARD_READWRITE_ERRORS
-                        logg << L::SL << Color::YELLOW << "[MemoryFile] Failed to read 2 times, leaving this as is." << L::EL;
-#endif
-                        break;
-                    }
-                }
-                else {
-                    errs = 0;
-                    total += read_now;
-                }
-            }
-#endif*/
-
-            return res;
+            return read_noalloc(siz, beg);
         }
 
     }

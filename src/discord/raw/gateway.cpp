@@ -220,15 +220,15 @@ namespace LSW {
         }
 
         gateway_payload_structure::gateway_payload_structure(MemoryFile&& oth)
-            : __fporig(oth), json(__fporig)
-        {
+            : __fporig(std::move(oth)), json(__fporig, false)
+        {            
             for(size_t reparse = 0; reparse < 3; reparse++) {
                 if (reparse > 0) { // reparse?
-                    json.reset_and_reparse();
                     logg << L::SL << Color::YELLOW << "[Gateway] PAYLOAD is trying to reset and re-parse [" << (reparse + 1) << "/3]" << L::EL;
                 }
+                json.reset_and_reparse();
 
-                if (oth.size() == 0) {
+                if (__fporig.size() == 0) {
                     logg << L::SL << Color::RED << "[Gateway] PAYLOAD failed! Empty MemoryFile?" << L::EL;
                     all_good = false;
                     return;
@@ -292,10 +292,6 @@ namespace LSW {
                 logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) * EVENTNUM=" << static_cast<int>(t) << L::EL;
 #endif 
             
-                if (all_good) {
-                    oth.clear();
-                }
-
 /*
 #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
                 logg << L::SL << Color::BRIGHT_GRAY << "[Gateway](gateway_payload_structure) Good? " << (all_good ? "Y" : "N") << L::EL;
@@ -725,11 +721,17 @@ namespace LSW {
                 case WEBSOCKET_EVENT_DATA:
                     if(data->op_code == WS_TRANSPORT_OPCODES_TEXT || data->op_code == WS_TRANSPORT_OPCODES_CLOSE) 
                     {
+                        if (data->payload_offset == 0) unique_cfg->event_buffer_fp.clear();
                         const bool theend = data->payload_len == data->payload_offset + data->data_len;
-#ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
-                        if (theend) logg << L::SL << Color::BRIGHT_GRAY << "[Gateway] EVENT is COMPLETE. Tasking Event..." << L::EL;
-#endif
                         unique_cfg->event_buffer_fp.append(data->data_ptr, data->data_len);
+
+#ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
+                        if (theend) {
+                            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway] EVENT is COMPLETE. Tasking Event..." << L::EL;
+                            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway] JSON size match [" << unique_cfg->event_buffer_fp.size() << " == " << data->payload_len << "]? (no testing, just report)" << L::EL;
+                            logg << L::SL << Color::BRIGHT_GRAY << "[Gateway] JSON:\n" << unique_cfg->event_buffer_fp.substr(0, 2048) << (unique_cfg->event_buffer_fp.size() > 2048 ? "..." : "") << L::EL;
+                        }
+#endif
 
                         if (theend) {
 #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
@@ -775,19 +777,29 @@ namespace LSW {
 
                                         {
                                             if (/*MemoryFileJSON*/ const auto it = unique_cfg->gw_data_temp->json["d"]["session_id"]; !it.is_null()) unique_cfg->session_id = it.as_string();
-                                            else all_good = false;
+                                            else {
+                                                logg << L::SL << Color::RED << "[Gateway] READY's \"d\"/\"session_id\" was null?!" << L::EL;
+                                                all_good = false;
+                                            }
                                             if (/*MemoryFileJSON*/ const auto it = unique_cfg->gw_data_temp->json["d"]["user"]["id"]; !it.is_null()) unique_cfg->bot_id = it.as_llu();
-                                            else all_good = false;
+                                            else {
+                                                logg << L::SL << Color::RED << "[Gateway] READY's \"d\"/\"user\"/\"id\" was null?!" << L::EL;
+                                                all_good = false;
+                                            }
 
                                             /*MemoryFileJSON*/ const auto j_nam = unique_cfg->gw_data_temp->json["d"]["user"]["username"];
                                             /*MemoryFileJSON*/ const auto j_dsc = unique_cfg->gw_data_temp->json["d"]["user"]["discriminator"];
 
                                             if (!j_nam.is_null() && !j_dsc.is_null()) unique_cfg->bot_string = j_nam.as_string() + "#" + j_dsc.as_string();
-                                            else all_good = false;
+                                            else {
+                                                logg << L::SL << Color::RED << "[Gateway] READY's \"d\"/\"user\"/\"username\" or \"d\"/\"user\"/\"discriminator\" was null?!" << L::EL;
+                                                all_good = false;
+                                            }
                                         }
 
                                         if (!all_good){
                                             logg << L::SL << Color::RED << "[Gateway] Ready event had errors! Restarting ESP32..." << L::EL;
+                                            logg << L::SL << Color::RED << "[Gateway] JSON was: " << unique_cfg->gw_data_temp->__fporig.substr() << L::EL;
                                             __c_gateway_got_unhandled_disconnect_so_restart("__c_gateway_redirect_event got invalid READY data."); // what if there is a bug, for real?
                                         }
                                         else{
