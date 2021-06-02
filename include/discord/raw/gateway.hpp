@@ -29,12 +29,12 @@ namespace LSW {
 
         const char gateway_url[] = "wss://gateway.discord.gg/?v=9&encoding=json";
         constexpr int gateway_max_timeout = 5000;
-        constexpr size_t gateway_stack_size = 16 * 1024;
-        constexpr size_t gateway_poll_stack_size = 17 * 1024;
+        constexpr size_t gateway_stack_size = 8 * 1024;
+        constexpr size_t gateway_poll_stack_size = 16 * 1024;
         constexpr unsigned gateway_queue_size_default = 30;
         constexpr unsigned gateway_poll_event_priority = 3;
 
-        const std::string app_version = "V0.1 BETA";
+        const std::string app_version = "V1.0.1 BETA";
         const std::string target_app = "ESP32";
         
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
@@ -218,7 +218,8 @@ namespace LSW {
             bool confirm_close = false; // gateway closed?
             bool resumed_successfully = false;
 
-            volatile unsigned long long ack_heartbeat = 0; // OPCODE 11 HEARTBEAT ACK (see enum gateway_opcodes)
+            //volatile unsigned long long ack_heartbeat = 0; // OPCODE 11 HEARTBEAT ACK (see enum gateway_opcodes)
+            volatile bool ack_heartbeat = false; // OPCODE 11 HEARTBEAT ACK (see enum gateway_opcodes)
             volatile unsigned long long heartbeat_at = 0; // right now. Use get_time_now_ms().
             unsigned long long heartbeat_interval = 45000; // this is set on GATEWAY_HELLO
             int sequence_number = -1; // -1 must be sent as 'null' (no ''). (ref: https://discord.com/developers/docs/topics/gateway#heartbeat)

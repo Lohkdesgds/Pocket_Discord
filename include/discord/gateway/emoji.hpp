@@ -14,7 +14,7 @@ namespace LSW {
         inline const char EmojiTAG[] = "Emoji";
 
         // based on Discord @ https://discord.com/developers/docs/topics/gateway#activity-object-activity-emoji
-        class GatewayEmoji {
+        class Emoji {
             std::string name;
             unsigned long long id = 0;
             bool animated = false;

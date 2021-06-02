@@ -3,10 +3,10 @@
 namespace LSW {
     namespace PocketDiscord {
         
-        std::string GatewayEmoji::to_json() const
+        std::string Emoji::to_json() const
         {
             if (empty()) {
-                ESP_LOGE(EmojiTAG, "GatewayEmoji::to_json had invalid configuration!");
+                ESP_LOGE(EmojiTAG, "Emoji::to_json had invalid configuration!");
                 return "";
             }
 
@@ -17,20 +17,20 @@ namespace LSW {
             "}";
         }
 
-        std::string GatewayEmoji::format_text() const
+        std::string Emoji::format_text() const
         {
             return id ? ("<" + std::string(animated ? "a" : "") + ":" + name + ":" + std::to_string(id) + ">") : name;
         }
 
-        std::string GatewayEmoji::format_react() const
+        std::string Emoji::format_react() const
         {
             return id ? (name + ":" + std::to_string(id)) : name;
         }
         
-        bool GatewayEmoji::load_from_json(const MemoryFileJSON& json)
+        bool Emoji::load_from_json(const MemoryFileJSON& json)
         {
             if (json.is_empty()) {
-                ESP_LOGE(EmojiTAG, "GatewayEmoji::load_from_json parsing failed! JSON was null!");
+                ESP_LOGE(EmojiTAG, "Emoji::load_from_json parsing failed! JSON was null!");
                 return false;
             }
             
@@ -41,37 +41,37 @@ namespace LSW {
             return id != 0 || !name.empty();
         }
 
-        bool GatewayEmoji::empty() const
+        bool Emoji::empty() const
         {
             return id == 0 && name.empty();
         }
 
-        void GatewayEmoji::set_name(const std::string& arg)
+        void Emoji::set_name(const std::string& arg)
         {
             name = arg;
         }
 
-        void GatewayEmoji::set_id(const unsigned long long& arg)
+        void Emoji::set_id(const unsigned long long& arg)
         {
             id = arg;
         }
         
-        void GatewayEmoji::set_animated(const bool& arg)
+        void Emoji::set_animated(const bool& arg)
         {
             animated = arg;
         }
 
-        const std::string& GatewayEmoji::get_name() const
+        const std::string& Emoji::get_name() const
         {
             return name;
         }
 
-        unsigned long long GatewayEmoji::get_id() const
+        unsigned long long Emoji::get_id() const
         {
             return id;
         }
         
-        bool GatewayEmoji::get_animated() const
+        bool Emoji::get_animated() const
         {
             return animated;
         }

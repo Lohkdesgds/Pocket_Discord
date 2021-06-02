@@ -115,22 +115,46 @@ namespace LSW {
 
             return load_from_json(res.mj) && id != 0 && !name.empty();
         }
+        
+        std::future<request_response> Channel::delete_message(const unsigned long long mid)
+        {
+            if (!mid || !id) return fake_future<request_response>();
 
-        std::future<request_response> Channel::create_message(const std::string& str, const std::string& embed)
+            const std::string request = "/channels/" + std::to_string(id) + "/messages/" + std::to_string(mid);
+            const http_request method = http_request::DELETE;
+            const std::string json = "";
+
+            return core.post_task(request, method, json);
+        }
+
+        std::future<request_response> Channel::create_message(const std::string& str)
         {
             if (!id) return fake_future<request_response>();
-
-            const std::string fixed = fix_quotes_string_for_json(str).substr(0, 2000);
             
             const std::string request = "/channels/" + std::to_string(id) + "/messages";
             const http_request method = http_request::POST;
             const std::string json = 
             "{"
-                "\"content\":\"" + fixed + "\"" +
-                std::string(embed.empty() ? "" : (",\"embed\":" + embed)) +
+                "\"content\":\"" + fix_quotes_string_for_json(str) + "\""
             "}";
 
             return core.post_task(request, method, json);
         }
+
+        std::future<request_response> Channel::create_message(const std::string& str, const Embed& embed)
+        {
+            if (!id) return fake_future<request_response>();
+            
+            const std::string request = "/channels/" + std::to_string(id) + "/messages";
+            const http_request method = http_request::POST;
+            const std::string json = 
+            "{"
+                "\"content\":\"" + fix_quotes_string_for_json(str) + "\","
+                "\"embed\":[" + embed.to_json() + "]"
+            "}";
+
+            return core.post_task(request, method, json);
+        }
+
     }
 }

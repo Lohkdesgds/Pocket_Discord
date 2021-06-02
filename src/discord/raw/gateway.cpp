@@ -353,7 +353,7 @@ namespace LSW {
                                     "}"
                                 "}";
                             }
-                            else{
+                            else {
                                 logg << L::SL << Color::GREEN << "[Gateway] Session ID exists, trying to RESUME..." << L::EL;
                                 unique_cfg.resumed_successfully = false;
                                 // do reconnect thingy
@@ -375,8 +375,11 @@ namespace LSW {
                         }
                         else{
                             logg << L::SL << Color::GREEN << "[Gateway] Identified itself! Bot is online!" << L::EL;
+                            //unique_cfg.ack_heartbeat = get_time_now_ms(); // unbug
+                            unique_cfg.ack_heartbeat = true; // unbug
                             unique_cfg.status = gateway_status::CONNECTED;
                             was_on_once = true;
+                            unique_cfg.resumed_successfully = true;
                         }
                     }
                         break;
@@ -384,16 +387,17 @@ namespace LSW {
                     {
                         const unsigned long long time_now = get_time_now_ms();
                         std::shared_lock<std::shared_mutex> safe_lock(unique_cfg.data_mtx);
-                        const bool heartbeat_close_enough = (time_now - unique_cfg.ack_heartbeat) <= (1.5 * unique_cfg.heartbeat_interval);
+                        //const bool heartbeat_close_enough = (time_now - unique_cfg.ack_heartbeat) <= (1.5 * unique_cfg.heartbeat_interval);
 
                         // top priority.
                         if (time_now >= unique_cfg.heartbeat_at) {
-                            if (!heartbeat_close_enough && unique_cfg.heartbeat_at != 0) {
+                            if (!unique_cfg.ack_heartbeat && unique_cfg.heartbeat_at != 0) {
                                 logg << L::SL << Color::YELLOW << "[Gateway] ACK Heartbeat wasn't set! Invalid session?! Trying RESUME..." << L::EL;
                                 unique_cfg.status = gateway_status::RECONNECT;
                                 fails_count++;
                                 continue;
                             }
+                            else unique_cfg.ack_heartbeat = false; // reset
                             
                             const std::string json_to_send = 
                             "{"
@@ -404,7 +408,6 @@ namespace LSW {
                             if (!send_raw_json(json_to_send)) {
                                 if (fails_count < 5){
                                     logg << L::SL << Color::RED << "[Gateway] Can't send HEARTBEAT. Trying again..." << L::EL;
-                                    //unique_cfg.ack_heartbeat = old_status_hb;
                                     fails_count++;
                                     continue;
                                 }
@@ -861,7 +864,7 @@ namespace LSW {
                             case gateway_opcodes::HEARTBEAT:              //  1 [SEND/RECEIVE]   // Fired periodically by the client to keep the connection alive.
                             {
                                 std::unique_lock<std::shared_mutex> safe_lock(unique_cfg->data_mtx);
-                                unique_cfg->heartbeat_at = 0; // causes handling thread to send heartbeat
+                                unique_cfg->heartbeat_at = 0; // causes handling thread to send heartbeat (discord is asking for heartbeat)
                             }    
                                 break;
                             case gateway_opcodes::RECONNECT:              //  6 [RECEIVE]        // You should attempt to reconnect and resume immediately.
@@ -882,8 +885,9 @@ namespace LSW {
                                 if (/*MemoryFileJSON*/ const auto it = unique_cfg->gw_data_temp->json["d"]["heartbeat_interval"]; !it.is_null()){
                                     std::unique_lock<std::shared_mutex> safe_lock(unique_cfg->data_mtx);
 
+                                    unique_cfg->heartbeat_at = 0; // new
                                     unique_cfg->heartbeat_interval = it.as_int();
-                                    unique_cfg->ack_heartbeat = get_time_now_ms(); // no error please.
+                                    //unique_cfg->ack_heartbeat = get_time_now_ms(); // no error please.
                                     
                                     if (unique_cfg->heartbeat_interval < 1000) {
                                         logg << L::SL << Color::RED << "[Gateway] Heartbeat wasn't good (" << unique_cfg->heartbeat_interval << ")?! Restarting ESP32..." << L::EL;
@@ -893,7 +897,7 @@ namespace LSW {
                                     }
 
                                     //unique_cfg->ack_heartbeat = get_time_now_ms(); // no error please.
-                                    unique_cfg->heartbeat_at = get_time_now_ms() + 1000; // one second after this
+                                    //unique_cfg->heartbeat_at = get_time_now_ms() + 1000; // one second after this
                                     unique_cfg->status = gateway_status::STARTUP;
                                     logg << L::SL << Color::GREEN << "[Gateway] HELLO is GOOD with Heartbeat interval at " << unique_cfg->heartbeat_interval << "!" << L::EL;
                                 }
@@ -910,7 +914,7 @@ namespace LSW {
 #ifdef LSW_SHOW_DETAILED_EVENTS
                                 logg << L::SL << Color::GREEN << "[Gateway] Heartbeat ACK got!" << L::EL;
 #endif
-                                unique_cfg->ack_heartbeat = get_time_now_ms();
+                                unique_cfg->ack_heartbeat = true;// get_time_now_ms();
                                 break;
                             default:
                                 break;

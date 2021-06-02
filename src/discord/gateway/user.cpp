@@ -68,6 +68,10 @@ namespace LSW {
         {
             bot = arg;
         }
-        
+        std::string User::format_mention() const
+        {
+            return id ? "<@" + std::to_string(id) + ">" : "";
+        }
+
     }
 }

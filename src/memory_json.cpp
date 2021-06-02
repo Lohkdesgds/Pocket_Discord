@@ -629,8 +629,8 @@ namespace LSW {
                 return std::stoull(temp);
             }
             catch (...) {
-                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as LLU '" << temp << "'" << L::EL;
-                throw std::runtime_error(("Failed parsing LLU '" + temp + "'!"));
+                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as LLU '" << get_value_str() << "'" << L::EL;
+                throw std::runtime_error(("Failed parsing LLU '" + get_value_str() + "'!"));
             }
             return 0;
         }
@@ -642,8 +642,8 @@ namespace LSW {
                 return std::stoll(temp);
             }
             catch (...) {
-                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as LLD '" << temp << "'" << L::EL;
-                throw std::runtime_error(("Failed parsing LLD '" + temp + "'!"));
+                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as LLD '" << get_value_str() << "'" << L::EL;
+                throw std::runtime_error(("Failed parsing LLD '" + get_value_str() + "'!"));
             }
             return 0;
         }
@@ -655,8 +655,8 @@ namespace LSW {
                 return std::stoi(temp);
             }
             catch (...) {
-                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as INT '" << temp << "'" << L::EL;
-                throw std::runtime_error(("Failed parsing INT '" + temp + "'!"));
+                logg << L::SL << Color::RED << "[MemoryJSON] Failed parsing as INT '" << get_value_str() << "'" << L::EL;
+                throw std::runtime_error(("Failed parsing INT '" + get_value_str() + "'!"));
             }
             return 0;
         }

@@ -35,8 +35,10 @@ idf_component_register(
         src/discord/raw/time_iso.cpp
         src/discord/gateway/attachment.cpp
         src/discord/gateway/channel.cpp
+        src/discord/gateway/embed.cpp
         src/discord/gateway/emoji.cpp
         src/discord/gateway/guild.cpp
+        src/discord/gateway/interaction.cpp
         src/discord/gateway/member.cpp
         src/discord/gateway/message.cpp
         src/discord/gateway/presence.cpp

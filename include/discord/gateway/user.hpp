@@ -34,6 +34,8 @@ namespace LSW {
             void set_discriminator(const std::string&);
             void set_avatar(const std::string&);
             void set_bot(const bool&);
+
+            std::string format_mention() const;
         };
     }
 }

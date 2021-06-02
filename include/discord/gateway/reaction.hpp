@@ -24,7 +24,7 @@ namespace LSW {
             unsigned long long message_id = 0;
             unsigned long long guild_id = 0;
             Member member; // only on created reactions
-            GatewayEmoji emoji; // partial emoji, yes
+            Emoji emoji; // partial emoji, yes
         public:
             Reaction(BotCore&);
             bool load_from_json(const MemoryFileJSON&);
@@ -34,21 +34,21 @@ namespace LSW {
             unsigned long long get_message_id() const;
             unsigned long long get_guild_id() const;
             const Member& get_member() const;
-            const GatewayEmoji get_emoji() const;
+            const Emoji get_emoji() const;
 
             void set_user_id(const unsigned long long&);
             void set_channel_id(const unsigned long long&);
             void set_message_id(const unsigned long long&);
             void set_guild_id(const unsigned long long&);
             Member& get_member_ref();
-            GatewayEmoji& get_emoji_ref();
+            Emoji& get_emoji_ref();
             
             // based on Discord message related calls
 
             // reacts the same emoji in this message
             std::future<request_response> react_on_top();
             // react a emoji in this message
-            std::future<request_response> react_on_same_message(const GatewayEmoji&);
+            std::future<request_response> react_on_same_message(const Emoji&);
             // remove this reaction (needs permission)
             std::future<request_response> delete_reaction();
             // remove someone's reaction (of this emoji)
@@ -58,7 +58,7 @@ namespace LSW {
             // remove all reactions with this emoji
             std::future<request_response> delete_this_emoji_reactions();
             // remove all reactions of a certain emoji in this message
-            std::future<request_response> delete_all_reactions_of_emoji(const GatewayEmoji&);
+            std::future<request_response> delete_all_reactions_of_emoji(const Emoji&);
         };
     }
 }

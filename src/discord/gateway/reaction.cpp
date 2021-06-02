@@ -32,12 +32,12 @@ namespace LSW {
 
             if (/*MemoryFileJSON*/ const auto it = json["emoji"]; !it.is_null()) {
                 if (!emoji.load_from_json(it)){
-                    ESP_LOGW(ReactionTAG, "Reaction::load_from_json parsing failed! GatewayEmoji failed somewhere while parsing.");
+                    ESP_LOGW(ReactionTAG, "Reaction::load_from_json parsing failed! Emoji failed somewhere while parsing.");
                     good = false;
                 }
             }
             else {
-                ESP_LOGW(ReactionTAG, "Reaction::load_from_json parsing failed! GatewayEmoji was null.");
+                ESP_LOGW(ReactionTAG, "Reaction::load_from_json parsing failed! Emoji was null.");
                 good = false;
             }
 
@@ -69,7 +69,7 @@ namespace LSW {
             return member;
         }
         
-        const GatewayEmoji Reaction::get_emoji() const
+        const Emoji Reaction::get_emoji() const
         {
             return emoji;
         }
@@ -99,7 +99,7 @@ namespace LSW {
             return member;
         }
         
-        GatewayEmoji& Reaction::get_emoji_ref()
+        Emoji& Reaction::get_emoji_ref()
         {
             return emoji;
         }
@@ -119,7 +119,7 @@ namespace LSW {
         }
         
         // react a emoji in this message
-        std::future<request_response> Reaction::react_on_same_message(const GatewayEmoji& arg)
+        std::future<request_response> Reaction::react_on_same_message(const Emoji& arg)
         {
             if (arg.empty() || !channel_id || !message_id) return fake_future<request_response>();
 
@@ -179,7 +179,7 @@ namespace LSW {
         }
         
         // remove all reactions of a certain emoji in this message
-        std::future<request_response> Reaction::delete_all_reactions_of_emoji(const GatewayEmoji& arg)
+        std::future<request_response> Reaction::delete_all_reactions_of_emoji(const Emoji& arg)
         {
             if (arg.empty() || !channel_id || !message_id) return fake_future<request_response>();
 

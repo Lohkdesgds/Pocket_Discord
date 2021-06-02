@@ -7,6 +7,7 @@
 #include "printer.hpp"
 #include "discord/raw/http_interface.hpp"
 #include "discord/core.hpp"
+#include "discord/gateway/embed.hpp"
 
 namespace LSW {
     namespace PocketDiscord {
@@ -56,8 +57,12 @@ namespace LSW {
             // add more in the future
 
 
-            // create a message (can embed)
-            std::future<request_response> create_message(const std::string&, const std::string& = "");
+            // deletes a message:
+            std::future<request_response> delete_message(const unsigned long long);
+            // create a answer to THIS message:
+            std::future<request_response> create_message(const std::string&);
+            // create a answer to THIS message: (with embed)
+            std::future<request_response> create_message(const std::string&, const Embed&);
         };
     }
 }

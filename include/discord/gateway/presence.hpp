@@ -38,7 +38,7 @@ namespace LSW {
             activity_types type; // cast to int
             std::string url; // valid if STREAMING
             std::string details; // what is being done rn (opt)
-            GatewayEmoji emoji; // valid if CUSTOM
+            Emoji emoji; // valid if CUSTOM
 
             std::string to_json() const;
         };
@@ -67,7 +67,7 @@ namespace LSW {
 
             // type, name, details, url
             void set_activity(const activity_types&, const std::string&, const std::string& = "", const std::string& = "");
-            void set_activity_emoji(const GatewayEmoji&);
+            void set_activity_emoji(const Emoji&);
 
         };
     }

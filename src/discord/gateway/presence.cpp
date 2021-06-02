@@ -94,7 +94,7 @@ namespace LSW {
             activities.url = url;
         }
         
-        void GatewayPresence::set_activity_emoji(const GatewayEmoji& emoji)
+        void GatewayPresence::set_activity_emoji(const Emoji& emoji)
         {
             activities.emoji = emoji;
         }
