@@ -21,14 +21,35 @@ namespace LSW {
             if (!icon_url.empty())          fp += "\"icon_url\":\"" + icon_url + "\",";
             if (!proxy_icon_url.empty())    fp += "\"proxy_icon_url\":\"" + proxy_icon_url + "\",";
 
-            fp.pop_back();
+            fp.pop_back(); // makes sense because of design (one)
+            fp += "}"; // end
+            
             return fp;
         }
 
         bool EmbedFooter::empty() const
         {
-            return name.empty() || icon_url.empty() || proxy_icon_url.empty();
+            return name.empty() && icon_url.empty() && proxy_icon_url.empty();
         }
+            
+        EmbedFooter& EmbedFooter::set_name(const std::string& obj)
+        {
+            name = obj;
+            return *this;
+        }
+
+        EmbedFooter& EmbedFooter::set_icon_url(const std::string& obj)
+        {
+            icon_url = obj;
+            return *this;
+        }
+        
+        EmbedFooter& EmbedFooter::set_proxy_icon_url(const std::string& obj)
+        {
+            proxy_icon_url = obj;
+            return *this;
+        }
+
         
         void EmbedImageThumbVideo::load_from_json(const MemoryFileJSON& json)
         {
@@ -50,14 +71,41 @@ namespace LSW {
             if (height != 0)                fp += "\"height\":" + std::to_string(height) + ",";
             if (width != 0)                 fp += "\"width\":" + std::to_string(width) + ",";
 
-            fp.pop_back();
+            fp.pop_back();            
+            fp += "}"; // end
+
             return fp;
         }
 
         bool EmbedImageThumbVideo::empty() const
         {
-            return url.empty() || proxy_url.empty();
+            return url.empty() && proxy_url.empty();
         }
+
+        EmbedImageThumbVideo& EmbedImageThumbVideo::set_url(const std::string& obj)
+        {
+            url = obj;
+            return *this;
+        }
+
+        EmbedImageThumbVideo& EmbedImageThumbVideo::set_proxy_url(const std::string& obj)
+        {
+            proxy_url = obj;
+            return *this;
+        }
+
+        EmbedImageThumbVideo& EmbedImageThumbVideo::set_height(const int obj)
+        {
+            height = obj;
+            return *this;
+        }
+
+        EmbedImageThumbVideo& EmbedImageThumbVideo::set_width(const int obj)
+        {
+            width = obj;
+            return *this;
+        }
+
         
         void EmbedProvider::load_from_json(const MemoryFileJSON& json)
         {
@@ -76,12 +124,26 @@ namespace LSW {
             if (!url.empty())               fp += "\"url\":\"" + url + "\",";
 
             fp.pop_back();
+            fp += "}"; // end
+
             return fp;
         }
 
         bool EmbedProvider::empty() const
         {
-            return name.empty() || url.empty();
+            return name.empty() && url.empty();
+        }
+
+        EmbedProvider& EmbedProvider::set_name(const std::string& obj)
+        {
+            name = obj;
+            return *this;
+        }
+
+        EmbedProvider& EmbedProvider::set_url(const std::string& obj)
+        {
+            url = obj;
+            return *this;
         }
         
         void EmbedAuthor::load_from_json(const MemoryFileJSON& json)
@@ -105,13 +167,40 @@ namespace LSW {
             if (!proxy_icon_url.empty())    fp += "\"proxy_icon_url\":\"" + proxy_icon_url + "\",";
 
             fp.pop_back();
+            fp += "}"; // end
+
             return fp;
         }
 
         bool EmbedAuthor::empty() const
         {
-            return name.empty() || url.empty() || icon_url.empty();
+            return name.empty() && url.empty() && icon_url.empty();
         }
+            
+        EmbedAuthor& EmbedAuthor::set_name(const std::string& obj)
+        {
+            name = obj;
+            return *this;
+        }
+
+        EmbedAuthor& EmbedAuthor::set_url(const std::string& obj)
+        {
+            url = obj;
+            return *this;
+        }
+
+        EmbedAuthor& EmbedAuthor::set_icon_url(const std::string& obj)
+        {
+            icon_url = obj;
+            return *this;
+        }
+
+        EmbedAuthor& EmbedAuthor::set_proxy_icon_url(const std::string& obj)
+        {
+            proxy_icon_url = obj;
+            return *this;
+        }
+
         
         void EmbedField::load_from_json(const MemoryFileJSON& json)
         {
@@ -127,8 +216,8 @@ namespace LSW {
             std::string fp;
 
             fp = "{";
-            if (!name.empty())              fp += "\"name\":\"" + name + "\",";
-            if (!value.empty())             fp += "\"value\":\"" + value + "\",";
+            if (!name.empty())              fp += "\"name\":\"" + fix_quotes_string_for_json(name).substr(0, 256) + "\",";
+            if (!value.empty())             fp += "\"value\":\"" + fix_quotes_string_for_json(value).substr(0, 1024) + "\",";
             fp += "\"inline\":" + std::string(_inline ? "true" : "false") + ",";
 
             fp.pop_back(); // , should be the last thing
@@ -139,7 +228,25 @@ namespace LSW {
 
         bool EmbedField::empty() const
         {
-            return name.empty() || value.empty();
+            return name.empty() && value.empty();
+        }
+
+        EmbedField& EmbedField::set_name(const std::string& obj)
+        {
+            name = obj;
+            return *this;
+        }
+
+        EmbedField& EmbedField::set_value(const std::string& obj)
+        {
+            value = obj;
+            return *this;
+        }
+
+        EmbedField& EmbedField::set_inline(const bool obj)
+        {
+            _inline = obj;
+            return *this;
         }
         
         void Embed::load_from_json(const MemoryFileJSON& json)
@@ -180,12 +287,12 @@ namespace LSW {
             if (!url.empty())                                                fp += "\"url\":\"" + url + "\",";
             if (!timestamp.empty())                                          fp += "\"timestamp\":\"" + timestamp + "\",";
             fp += "\"color\":" + std::to_string(color) + ",";
-            if (footer.has_value() && !footer->empty())                 fp += "\"footer\":" + footer->to_json() + ",";
-            if (image.has_value() && !image->empty())                   fp += "\"image\":" + image->to_json() + ",";
-            if (thumbnail.has_value() && !thumbnail->empty())           fp += "\"thumbnail\":" + thumbnail->to_json() + ",";
-            if (video.has_value() && !video->empty())                   fp += "\"video\":" + video->to_json() + ",";
-            if (provider.has_value() && !provider->empty())             fp += "\"provider\":" + provider->to_json() + ",";
-            if (author.has_value() && !author->empty())                 fp += "\"author\":" + author->to_json() + ",";
+            if (footer.has_value() && !footer->empty())                      fp += "\"footer\":" + footer->to_json() + ",";
+            if (image.has_value() && !image->empty())                        fp += "\"image\":" + image->to_json() + ",";
+            if (thumbnail.has_value() && !thumbnail->empty())                fp += "\"thumbnail\":" + thumbnail->to_json() + ",";
+            if (video.has_value() && !video->empty())                        fp += "\"video\":" + video->to_json() + ",";
+            if (provider.has_value() && !provider->empty())                  fp += "\"provider\":" + provider->to_json() + ",";
+            if (author.has_value() && !author->empty())                      fp += "\"author\":" + author->to_json() + ",";
             if (fields.size() > 0){
                 fp += "\"fields\":[";
 
@@ -356,6 +463,20 @@ namespace LSW {
         Embed& Embed::set_author(EmbedAuthor&& obj)
         {
             author = std::move(obj);
+            return *this;
+        }
+        
+        Embed& Embed::set_author(const User& obj)
+        {
+            author = std::move(EmbedAuthor()
+                .set_name(obj.format_full_name())
+                .set_icon_url(obj.format_avatar_url()));
+            return *this;
+        }
+        
+        Embed& Embed::add_field(EmbedField&& obj)
+        {
+            fields.push_back(std::move(obj));
             return *this;
         }
 

@@ -17,6 +17,12 @@ namespace LSW {
             : core(othcore)
         {
         }
+        
+        Member::Member(const Member& oth)
+            : core(oth.core), user(oth.user), nick(oth.nick), roles(oth.roles), joined_at(oth.joined_at), pending(oth.pending), permissions(oth.permissions)
+        {
+
+        }
 
         bool Member::load_from_json(const MemoryFileJSON& json, const bool supress_user_err)
         {
@@ -106,7 +112,7 @@ namespace LSW {
         
 
         // setup a member, guild & user id, (load full member (true) or just set these vars (false)?)
-        bool Member::load_member(const unsigned long long& nid, const unsigned long long& gid, const bool fullload)
+        bool Member::load_member(const unsigned long long nid, const unsigned long long gid, const bool fullload)
         {
             if (nid == 0 || (fullload && gid == 0)) return false;
 
@@ -130,7 +136,7 @@ namespace LSW {
         }
 
         // updates member with defined variables (at this guild)
-        std::future<request_response> Member::update_member_at_guild(const unsigned long long& gid)
+        std::future<request_response> Member::update_member_at_guild(const unsigned long long gid)
         {
             if (!gid || !user.get_id()) return fake_future<request_response>();
 
@@ -149,7 +155,7 @@ namespace LSW {
         }
 
         // changes their nick in guild. If string is null, updates nick to current set
-        std::future<request_response> Member::modify_member_nick(const unsigned long long& gid, const std::string& newnick)
+        std::future<request_response> Member::modify_member_nick(const unsigned long long gid, const std::string& newnick)
         {
             if (!gid || !user.get_id()) return fake_future<request_response>();
 
@@ -166,7 +172,7 @@ namespace LSW {
         }
         
         // adds role to member in guild
-        std::future<request_response> Member::add_member_role(const unsigned long long& gid, const unsigned long long& roleid)
+        std::future<request_response> Member::add_member_role(const unsigned long long gid, const unsigned long long roleid)
         {
             if (!gid || !user.get_id() || !roleid) return fake_future<request_response>();
 
@@ -183,7 +189,7 @@ namespace LSW {
         }
         
         // remove role to member in guild
-        std::future<request_response> Member::remove_member_role(const unsigned long long& gid, const unsigned long long& roleid)
+        std::future<request_response> Member::remove_member_role(const unsigned long long gid, const unsigned long long roleid)
         {
             if (!gid || !user.get_id() || !roleid) return fake_future<request_response>();
 
@@ -200,7 +206,7 @@ namespace LSW {
         }
         
         // remove member from guild (kick)
-        std::future<request_response> Member::kick_member(const unsigned long long& gid)
+        std::future<request_response> Member::kick_member(const unsigned long long gid)
         {
             if (!gid || !user.get_id()) return fake_future<request_response>();
 
@@ -212,7 +218,7 @@ namespace LSW {
         }
         
         // ban member from guild (+ reason, delete how many days of messages)
-        std::future<request_response> Member::ban_member(const unsigned long long& gid, const std::string& reason, const int days_delete)
+        std::future<request_response> Member::ban_member(const unsigned long long gid, const std::string& reason, const int days_delete)
         {
             if (!gid || !user.get_id() || reason.empty() || (days_delete < 0 || days_delete > 7)) return fake_future<request_response>();
 
@@ -228,7 +234,7 @@ namespace LSW {
         }
         
         // unban member
-        std::future<request_response> Member::unban_member(const unsigned long long& gid)
+        std::future<request_response> Member::unban_member(const unsigned long long gid)
         {
             if (!gid || !user.get_id()) return fake_future<request_response>();
 

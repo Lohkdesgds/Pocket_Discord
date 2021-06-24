@@ -27,6 +27,8 @@ namespace LSW {
             Emoji emoji; // partial emoji, yes
         public:
             Reaction(BotCore&);
+            Reaction(const Reaction&);
+
             bool load_from_json(const MemoryFileJSON&);
 
             unsigned long long get_user_id() const;

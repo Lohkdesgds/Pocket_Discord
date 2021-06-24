@@ -6,6 +6,7 @@
 #include "memory_json.hpp"
 #include "led_control.hpp"
 #include "tasker.hpp"
+#include "delayed_tasker.hpp"
 #include "discord/core.hpp"
 #include "discord/raw/gateway.hpp"
 #include "discord/raw/http_interface.hpp"

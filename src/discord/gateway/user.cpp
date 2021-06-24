@@ -3,6 +3,11 @@
 namespace LSW {
     namespace PocketDiscord {
 
+        User::User(const User& oth)
+            : id(oth.id), username(oth.username), discriminator(oth.discriminator), avatar(oth.avatar), bot(oth.bot)
+        {
+        }
+
         bool User::load_from_json(const MemoryFileJSON& json)
         {
             if (json.is_empty()) {
@@ -68,9 +73,21 @@ namespace LSW {
         {
             bot = arg;
         }
+        
         std::string User::format_mention() const
         {
             return id ? "<@" + std::to_string(id) + ">" : "";
+        }
+        
+        std::string User::format_full_name() const
+        {
+            return username + "#" + discriminator;
+        }
+        
+        std::string User::format_avatar_url(const size_t siz) const
+        {
+            if (!id || avatar.empty()) return "";
+            return "https://cdn.discordapp.com/avatars/" + std::to_string(id) + "/" + avatar + ".png?size=" + std::to_string(siz);
         }
 
     }

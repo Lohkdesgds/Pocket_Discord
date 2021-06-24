@@ -12,20 +12,20 @@ namespace LSW {
             fp = "{";
             fp += "\"tts\":" + std::string(tts ? "true" : "false") + ",";
             fp += "\"content\":\"" + content + "\",";
-            fp += "\"flags\":" + std::to_string(flags) + ",";
+            fp += "\"flags\":" + std::to_string(flags) + "";
             
             if (embeds.size() > 0){
-                fp += "\"embeds\":[";
+                fp += ",\"embeds\":[";
 
                 for(const auto& i : embeds){
                     fp += i.to_json() + ",";
                 }
 
                 fp.pop_back(); // , should be the last thing
-                fp += "],";
+                fp += "]";
             }
 
-            fp.pop_back(); // , should be the last thing
+            //fp.pop_back(); // , should be the last thing
             fp += "}"; // end
 
             return std::move(fp);
@@ -85,10 +85,10 @@ namespace LSW {
             std::string fp;
 
             fp = "{";
-            fp += "\"type\":" + std::to_string(static_cast<int>(type)) + ",";
-            if (data.has_value()) fp += "\"data\":" + data->to_json() + ",";
+            fp += "\"type\":" + std::to_string(static_cast<int>(type));
+            if (data.has_value()) fp += ",\"data\":" + data->to_json();
 
-            fp.pop_back(); // ,
+            //fp.pop_back(); // ,
             fp += "}";
             return std::move(fp);
         }

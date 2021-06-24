@@ -23,6 +23,7 @@ endif()
 
 idf_component_register(
     SRCS 
+        src/delayed_tasker.cpp
         src/tasker.cpp
         src/printer.cpp
         src/led_control.cpp

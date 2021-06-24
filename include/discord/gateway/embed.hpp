@@ -23,6 +23,10 @@ namespace LSW {
             void load_from_json(const MemoryFileJSON&);
             std::string to_json() const;
             bool empty() const;
+            
+            EmbedFooter& set_name(const std::string&);
+            EmbedFooter& set_icon_url(const std::string&);
+            EmbedFooter& set_proxy_icon_url(const std::string&);
         };
 
         class EmbedImageThumbVideo { // image, thumbnail and video are the same
@@ -34,6 +38,11 @@ namespace LSW {
             void load_from_json(const MemoryFileJSON&);
             std::string to_json() const;
             bool empty() const;
+
+            EmbedImageThumbVideo& set_url(const std::string&);
+            EmbedImageThumbVideo& set_proxy_url(const std::string&);
+            EmbedImageThumbVideo& set_height(const int);
+            EmbedImageThumbVideo& set_width(const int);
         };
 
         class EmbedProvider {
@@ -43,6 +52,9 @@ namespace LSW {
             void load_from_json(const MemoryFileJSON&);
             std::string to_json() const;
             bool empty() const;
+
+            EmbedProvider& set_name(const std::string&);
+            EmbedProvider& set_url(const std::string&);
         };
 
         class EmbedAuthor {
@@ -54,6 +66,11 @@ namespace LSW {
             void load_from_json(const MemoryFileJSON&);
             std::string to_json() const;
             bool empty() const;
+            
+            EmbedAuthor& set_name(const std::string&);
+            EmbedAuthor& set_url(const std::string&);
+            EmbedAuthor& set_icon_url(const std::string&);
+            EmbedAuthor& set_proxy_icon_url(const std::string&);
         };
 
         class EmbedField {
@@ -64,6 +81,10 @@ namespace LSW {
             void load_from_json(const MemoryFileJSON&);
             std::string to_json() const;
             bool empty() const;
+
+            EmbedField& set_name(const std::string&);
+            EmbedField& set_value(const std::string&);
+            EmbedField& set_inline(const bool);
         };
 
         class Embed { 
@@ -114,6 +135,8 @@ namespace LSW {
             Embed& set_video(EmbedImageThumbVideo&&);
             Embed& set_provider(EmbedProvider&&);
             Embed& set_author(EmbedAuthor&&);
+            Embed& set_author(const User&);
+            Embed& add_field(EmbedField&&);
 
             std::vector<EmbedField>& get_fields_ref();
         };

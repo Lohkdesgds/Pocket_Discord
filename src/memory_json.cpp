@@ -288,7 +288,7 @@ namespace LSW {
             else {
                 const std::string temp = fp.substr(at_left, at_right - at_left);
                 if (temp == "true" || temp == "false") return json_type::BOOL;
-                else if (temp == "{}" || temp == "[]" || temp == "null") return json_type::EMPTY;
+                else if (temp == "{}" || temp == "[]" || temp == "null" || temp.empty()) return json_type::EMPTY;
                 else return json_type::NUMBER;
             }
             logg << L::SL << Color::RED << "[MemoryJSON] Failed: can't determine json type." << L::EL;
@@ -527,6 +527,7 @@ namespace LSW {
         {
             objs.clear();
             arrs.clear();
+            type = get_type_on(memfp, m_lim_beg, (m_lim_end == static_cast<size_t>(-1) ? memfp.size() : m_lim_end));
             parse();
         }
 

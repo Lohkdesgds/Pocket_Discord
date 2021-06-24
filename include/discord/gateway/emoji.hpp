@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 #include "memory_file.hpp"
 #include "memory_json.hpp"
@@ -18,6 +20,8 @@ namespace LSW {
             std::string name;
             unsigned long long id = 0;
             bool animated = false;
+
+            std::string encoded_name() const; // only needed if id == 0
         public:
             std::string to_json() const;
             std::string format_text() const;
@@ -26,9 +30,9 @@ namespace LSW {
 
             bool empty() const;
 
-            void set_name(const std::string&);
-            void set_id(const unsigned long long&);
-            void set_animated(const bool&);
+            Emoji& set_name(const std::string&);
+            Emoji& set_id(const unsigned long long&);
+            Emoji& set_animated(const bool&);
 
             const std::string& get_name() const;
             unsigned long long get_id() const;

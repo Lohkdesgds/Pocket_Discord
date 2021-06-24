@@ -21,6 +21,9 @@ namespace LSW {
             std::string avatar; // may be null (empty)
             bool bot = false; // may not be in JSON
         public:
+            User() = default;
+            User(const User&);
+            
             bool load_from_json(const MemoryFileJSON&);
 
             unsigned long long get_id() const;
@@ -36,6 +39,8 @@ namespace LSW {
             void set_bot(const bool&);
 
             std::string format_mention() const;
+            std::string format_full_name() const; // username#discriminator
+            std::string format_avatar_url(const size_t = 256) const; // size, 2^n only
         };
     }
 }

@@ -46,6 +46,8 @@ namespace LSW {
         public:
             ~BotCore();
 
+            bool is_connected_and_ready() const;
+
             bool setup(const std::string&, const int, std::function<void(const gateway_events&, const MemoryFileJSON&)>);
             void stop();
 

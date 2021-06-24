@@ -211,6 +211,8 @@ namespace LSW {
             std::future<request_response> create_message_same_channel(const std::string&, const Embed&);
             // send an exact copy of this message in the same channel in the same guild with embeds and components.
             std::future<request_response> create_this_message();
+            // edit a message with this ID with current data in it
+            std::future<request_response> edit_this_message_as_is();
             
             // to add.
             /*// create a reaction to the message (what emoji)

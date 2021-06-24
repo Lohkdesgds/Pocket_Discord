@@ -13,71 +13,14 @@ namespace LSW {
         {
         }
 
-        /*request_block::request_block(std::function<request_response(void)> ff)
-        {
-            request = new std::packaged_task<request_response()>(ff);
-        }
-        
-        void request_block::request_block(request_block&& req)
-        {
-            *this = std::move(req);
-        }
-        
-        void request_block::operator=(request_block&& req)
-        {
-            if (request) delete request;
-            request = req.request;
-            req.request = nullptr;
-        }
-
-        request_block::~request_block()
-        {
-            if (request) {
-                delete request;
-                request = nullptr;
-            }
-        }
-        
-        void request_block::task()
-        {
-            if (request && request->valid()) (*request)();
-        }
-        
-        std::packaged_task<request_response()>* request_block::cut_off()
-        {
-            std::packaged_task<request_response()>* _temp = request;
-            request = nullptr;
-            return _temp;
-        }*/
-        
-        /*void BotCore::http_thr()
-        {
-            logg << L::SL << Color::GREEN << "[BotCore] HTTP Async thread is tasking!" << L::EL;
-
-            while( http_keep_tasking)
-            {
-                vTaskDelay(pdMS_TO_TICKS(50));
-                if (tasks_todo_http.size() == 0) {
-                    std::this_thread::yield();
-                    continue;
-                }
-                
-                std::lock_guard<std::mutex> lucky(http_mtx);
-                
-                //ESP_LOGI(coreTAG, "BotCore::http_thr detected one task to do. Doing!");
-
-                if (tasks_todo_http.front().valid()) tasks_todo_http.front()();
-                tasks_todo_http.erase(tasks_todo_http.begin());
-                
-                //ESP_LOGI(coreTAG, "BotCore::http_thr done one task!");
-            }
-
-            logg << L::SL << Color::YELLOW << "[BotCore] HTTP Async thread is not tasking anymore." << L::EL;
-        }*/
-
         BotCore::~BotCore()
         {
             stop();
+        }
+
+        bool BotCore::is_connected_and_ready() const
+        {
+            return gateway.is_connected_and_ready();
         }
 
         bool BotCore::setup(const std::string& token, const int intents, std::function<void(const gateway_events&, const MemoryFileJSON&)> func)

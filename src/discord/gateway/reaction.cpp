@@ -8,6 +8,11 @@ namespace LSW {
         {
         }
         
+        Reaction::Reaction(const Reaction& oth)
+            : core(oth.core), user_id(oth.user_id), channel_id(oth.channel_id), message_id(oth.message_id), guild_id(oth.guild_id), member(oth.member), emoji(oth.emoji)
+        {
+        }
+        
         bool Reaction::load_from_json(const MemoryFileJSON& json)
         {
             if (json.is_empty()) {

@@ -3,6 +3,30 @@
 namespace LSW {
     namespace PocketDiscord {
         
+        std::string Emoji::encoded_name() const
+        {
+            std::ostringstream escaped;
+            escaped.fill('0');
+            escaped << std::hex;
+
+            for (std::string::value_type c : name)
+            {
+                // Keep alphanumeric and other accepted characters intact
+                if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+                {
+                    escaped << c;
+                    continue;
+                }
+
+                // Any other characters are percent-encoded
+                escaped << std::uppercase;
+                escaped << '%' << std::setw(2) << int((unsigned char)c);
+                escaped << std::nouppercase;
+            }
+
+            return escaped.str();
+        }
+
         std::string Emoji::to_json() const
         {
             if (empty()) {
@@ -24,7 +48,7 @@ namespace LSW {
 
         std::string Emoji::format_react() const
         {
-            return id ? (name + ":" + std::to_string(id)) : name;
+            return id ? (name + ":" + std::to_string(id)) : encoded_name();
         }
         
         bool Emoji::load_from_json(const MemoryFileJSON& json)
@@ -46,19 +70,22 @@ namespace LSW {
             return id == 0 && name.empty();
         }
 
-        void Emoji::set_name(const std::string& arg)
+        Emoji& Emoji::set_name(const std::string& arg)
         {
             name = arg;
+            return *this;
         }
 
-        void Emoji::set_id(const unsigned long long& arg)
+        Emoji& Emoji::set_id(const unsigned long long& arg)
         {
             id = arg;
+            return *this;
         }
         
-        void Emoji::set_animated(const bool& arg)
+        Emoji& Emoji::set_animated(const bool& arg)
         {
             animated = arg;
+            return *this;
         }
 
         const std::string& Emoji::get_name() const

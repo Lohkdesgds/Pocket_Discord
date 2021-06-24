@@ -34,7 +34,7 @@ namespace LSW {
         constexpr unsigned gateway_queue_size_default = 30;
         constexpr unsigned gateway_poll_event_priority = 3;
 
-        const std::string app_version = "V1.0.1 BETA";
+        const std::string app_version = "V1.1.0 BETA";
         const std::string target_app = "ESP32";
         
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
@@ -217,6 +217,7 @@ namespace LSW {
             bool no_gateway_please = false; // skip gateway events for now?
             bool confirm_close = false; // gateway closed?
             bool resumed_successfully = false;
+            bool ready_event_got = false; // ready
 
             //volatile unsigned long long ack_heartbeat = 0; // OPCODE 11 HEARTBEAT ACK (see enum gateway_opcodes)
             volatile bool ack_heartbeat = false; // OPCODE 11 HEARTBEAT ACK (see enum gateway_opcodes)
@@ -265,6 +266,8 @@ namespace LSW {
             bool setup(const std::string&, const int, std::function<void(const gateway_events&, const MemoryFileJSON&)>);
 
             void stop();
+
+            bool is_connected_and_ready() const;
 
             const std::string& get_token() const;
             unsigned long long get_bot_id() const;

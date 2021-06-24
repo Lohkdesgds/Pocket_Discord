@@ -22,11 +22,11 @@
 namespace LSW {
     namespace PocketDiscord {
         
-        const char mount_point[] = "/sdcard";
-        constexpr int file_transf_size_limit = 4000;
-        constexpr size_t alloc_size_each = 2048;
+        const char mount_point[] = "/sdcard"; // don't ever change!
+        constexpr int file_transf_size_limit = 4096;
+        constexpr size_t alloc_size_each = 512;
         constexpr int files_open_max = 15;
-        constexpr int files_speed_hz = 40000;
+        constexpr int files_speed_hz = 20000;
 
         constexpr gpio_num_t pin_miso = GPIO_NUM_19;
         constexpr gpio_num_t pin_mosi = GPIO_NUM_23;

@@ -122,7 +122,7 @@ namespace LSW {
             };
 
             const size_t m_lim_beg, m_lim_end;
-            const json_type type = json_type::OBJECT;
+            json_type type = json_type::OBJECT;
             const MemoryFile& memfp;
             std::vector<json_pair> objs;
             std::vector<json_unique> arrs;

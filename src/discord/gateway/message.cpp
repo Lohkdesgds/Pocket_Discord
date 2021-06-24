@@ -678,7 +678,7 @@ namespace LSW {
                 }
 
                 json.pop_back(); // has ,
-                json += "]";
+                json += "],";
             }
 
             if (components.size() > 0)
@@ -708,11 +708,71 @@ namespace LSW {
                 }
 
                 json.pop_back(); // has ,
-                json += "]";
+                json += "],";
             }
+            json.pop_back();
             json += "}";
 
-            logg << L::SL << Color::BRIGHT_GRAY << "[Message] Tasking:\nPath=" << request << "\nMethod=POST\nJSON=" << json << L::EL;
+            //logg << L::SL << Color::BRIGHT_GRAY << "[MSG] Tasking:\nPath=" << request << "\nMethod=POST\nJSON=" << json << L::EL;
+
+            return core.post_task(request, method, json);
+        }
+
+        std::future<request_response> Message::edit_this_message_as_is()
+        {
+            if (!channel_id || !id || (content.empty() && !embeds.size() && !components.size())) return fake_future<request_response>();
+            
+            const std::string request = "/channels/" + std::to_string(channel_id) + "/messages/" + std::to_string(id);
+            const http_request method = http_request::PATCH;
+            std::string json;
+
+            json += "{";
+            json += "\"content\":\"" + fix_quotes_string_for_json(content) + "\",";
+            if (embeds.size() > 0)
+            {
+                json += "\"embeds\":[";
+
+                for(const auto& i : embeds){
+                    json += i.to_json() + ",";
+                }
+
+                json.pop_back(); // has ,
+                json += "],";
+            }
+
+            if (components.size() > 0)
+            {
+                json += "\"components\":[";
+
+                for(const auto& i : components) {
+                    switch(i.get_type()){
+                    case component_type::ACTION_ROW:
+                        {
+                            const ActionRow* obj = i.as_actionrow();
+                            json += obj->to_json() + ",";
+                        }
+                        break;
+                    case component_type::BUTTON:
+                        {
+                            const ButtonObject* obj = i.as_button();
+                            json += obj->to_json() + ",";
+                        }
+                        break;
+                    default:
+                        logg << L::SL << Color::RED << "[edit_this_message_as_is] FATAL ERROR CANNOT CONTINUE, SERIOUSLY, HOW IS THIS EVEN POSSIBLE?" << L::EL;
+                        vTaskDelay(500 / portTICK_PERIOD_MS); // no rush
+                        esp_restart();
+                        break;
+                    }
+                }
+
+                json.pop_back(); // has ,
+                json += "],";
+            }
+            json.pop_back();
+            json += "}";
+
+            //logg << L::SL << Color::BRIGHT_GRAY << "[Message] Tasking:\nPath=" << request << "\nMethod=POST\nJSON=" << json << L::EL;
 
             return core.post_task(request, method, json);
         }

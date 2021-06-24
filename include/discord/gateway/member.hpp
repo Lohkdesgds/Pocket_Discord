@@ -30,6 +30,7 @@ namespace LSW {
             std::string gen_roles_str() const;
         public:
             Member(BotCore&);
+            Member(const Member&);
             // bool: Messages doesn't have USER, but AUTHOR, so error check doesn't work! Set TRUE if SUPRESS UserID == 0
             bool load_from_json(const MemoryFileJSON&, const bool = false);
             
@@ -49,22 +50,22 @@ namespace LSW {
             // based on Discord message related calls
 
             // setup a member, guild & user id, (load full member (true) or just set these vars (false)?)
-            bool load_member(const unsigned long long&, const unsigned long long&, const bool = true);
+            bool load_member(const unsigned long long, const unsigned long long, const bool = true);
 
             // updates member with defined variables (at this guild)
-            std::future<request_response> update_member_at_guild(const unsigned long long&);
+            std::future<request_response> update_member_at_guild(const unsigned long long);
             // changes their nick in guild. If string is null, updates nick to current set
-            std::future<request_response> modify_member_nick(const unsigned long long&, const std::string& = "");
+            std::future<request_response> modify_member_nick(const unsigned long long, const std::string& = "");
             // adds role to member in guild
-            std::future<request_response> add_member_role(const unsigned long long&, const unsigned long long&);
+            std::future<request_response> add_member_role(const unsigned long long, const unsigned long long);
             // remove role to member in guild
-            std::future<request_response> remove_member_role(const unsigned long long&, const unsigned long long&);
+            std::future<request_response> remove_member_role(const unsigned long long, const unsigned long long);
             // remove member from guild (kick)
-            std::future<request_response> kick_member(const unsigned long long&);
+            std::future<request_response> kick_member(const unsigned long long);
             // ban member from guild (+ reason, delete how many days of messages)
-            std::future<request_response> ban_member(const unsigned long long&, const std::string& = "The hammer has spoken", const int = 0);
+            std::future<request_response> ban_member(const unsigned long long, const std::string& = "The hammer has spoken", const int = 0);
             // unban member
-            std::future<request_response> unban_member(const unsigned long long&);
+            std::future<request_response> unban_member(const unsigned long long);
 
         };
 
