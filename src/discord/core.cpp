@@ -83,14 +83,25 @@ namespace LSW {
                     if (pr.code == 429) // bad news, overload (how?)
                     {
                         logg << L::SL << Color::YELLOW << "[BotCore] Post task got RATE LIMITED!" << L::EL;
-                        if (pr.mj.is_empty()) {
+                        const std::string retry_after = g_http.get_header("retry-after");
+
+                        if (pr.mj.is_empty() && retry_after.empty()) {
                             logg << L::SL << Color::YELLOW << "[BotCore] Post task can't parse JSON correctly. Waiting 15 seconds instead!" << L::EL;
                             vTaskDelay(pdMS_TO_TICKS(15000));
                         }
-                        else{
-                            const int time = 1 + pr.mj["retry_after"].as_int();
-                            logg << L::SL << Color::YELLOW << "[BotCore] Waiting " << time << " seconds." << L::EL;
-                            vTaskDelay(pdMS_TO_TICKS(time * 1000));
+                        else {
+                            int timee = 0;
+                            
+                            if (!pr.mj.is_empty()) timee = 1 + pr.mj["retry_after"].as_int();
+                            else timee = atoi(retry_after.c_str());
+
+                            if (timee > 60 || timee < 0) {
+                                logg << L::SL << Color::YELLOW << "[BotCore] RATE LIMIT value was invalid! It was " << timee << " second(s). Doing 20 seconds instead." << L::EL;
+                                timee = 20;
+                            }
+                            else logg << L::SL << Color::YELLOW << "[BotCore] Waiting " << timee << " second(s)." << L::EL;
+
+                            vTaskDelay(pdMS_TO_TICKS(timee * 1000));
                         }
                         try_again++;
                         vTaskDelay(pdMS_TO_TICKS(200));                        

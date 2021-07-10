@@ -89,6 +89,16 @@ namespace LSW {
 
             return true;
         }
+        
+        void HttpConnection::reset_to(const std::string& path, const esp_http_client_method_t method)
+        {
+            async_r.headers.clear();
+            async_r.data.clear();
+
+            esp_http_client_set_url(client, (http_url + path).c_str());
+            esp_http_client_set_method(client, method);
+
+        }
 
         HttpConnection::~HttpConnection()
         {
@@ -114,27 +124,31 @@ namespace LSW {
             } 
             if (!async_r.taskend) return false; // task didn't end
             if (!client) return false;
-
-            async_r.headers.clear();
-            async_r.data.clear();
-
             //good_to_read = false;
-            const esp_http_client_method_t method = http_request_to_esp_method(method_orig);
 
-            esp_http_client_set_url(client, (http_url + path).c_str());
-            esp_http_client_set_method(client, method);
+            const esp_http_client_method_t method = http_request_to_esp_method(method_orig);
+            reset_to(path, method);
 
             int maxsiz = static_cast<int>(data.length());
             esp_err_t err = ESP_OK;
 
             for(int u = 0; u < 10; u++){
                 if ((err = esp_http_client_open(client, maxsiz)) == ESP_OK) break;
-                else logg << L::SL << Color::YELLOW << "[HTTP] Task timedout once [" << (u + 1) << "/10] | path=" << path << ", method=" << static_cast<int>(method_orig) << ", json=" << data << L::EL;
-                vTaskDelay(pdMS_TO_TICKS(100));
+                logg << L::SL << Color::YELLOW << "[HTTP] Task timedout once [" << (u + 1) << "/10] | path=" << path << ", method=" << static_cast<int>(method_orig) << ", json=" << data << L::EL;
+                if (u >= 2){
+                    logg << L::SL << Color::GREEN << "[HTTP] Refreshing connection..." << L::EL;
+                    if (!reconnect(true)){
+                        logg << L::SL << Color::YELLOW << "[HTTP] Refresh connection failed!" << L::EL;
+                        return false; // can't reconnect
+                    }
+                    else logg << L::SL << Color::GREEN << "[HTTP] Refresh connection all good." << L::EL;
+                    reset_to(path, method);
+                }
             }
 
             if (err != ESP_OK){
-                logg << L::SL << Color::RED << "[HTTP] Task timeout." << L::EL;
+                logg << L::SL << Color::RED << "[HTTP] Task can't be done for real! Restarting..." << L::EL;
+                esp_restart(); // best solution for now.
                 return false;
             }
 

@@ -26,6 +26,7 @@ namespace LSW {
             std::string joined_at;
             bool pending = true; // accepted rules? false if accepted. Assume not accepted?!
             std::string permissions; // may not be set (optional)
+            unsigned long long guild_id = 0; // optional in member events
 
             std::string gen_roles_str() const;
         public:
@@ -41,6 +42,7 @@ namespace LSW {
             const std::string& get_joined_at() const;
             bool get_pending() const;
             const std::string& get_permissions() const;
+            unsigned long long get_guild_id() const; // no set because that doesn't make sense
 
             User& get_user_ref();
             void set_nick(const std::string&);

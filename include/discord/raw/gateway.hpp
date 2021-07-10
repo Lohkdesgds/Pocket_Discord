@@ -13,6 +13,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <atomic>
 
 #include "discord/raw/time_iso.hpp"
 #include "tasker.hpp"
@@ -23,18 +24,21 @@
 //#define LSW_SHOW_DETAILED_EVENTS // event tasking and heartbeats
 //#define LSW_SHOW_JSON_SENT_CONFIRMATION_SUCCESS
 //#define LSW_SHOW_JSON_BEING_SENT
+#define LSW_ENABLE_AGGRESSIVE_ERROR // for beta testing only
 
 namespace LSW {
     namespace PocketDiscord {
 
         const char gateway_url[] = "wss://gateway.discord.gg/?v=9&encoding=json";
         constexpr int gateway_max_timeout = 5000;
-        constexpr size_t gateway_stack_size = 8 * 1024;
+        constexpr size_t gateway_stack_size = 6 * 1024;
         constexpr size_t gateway_poll_stack_size = 16 * 1024;
+        constexpr size_t gateway_buffer_size = 4096;
+        constexpr unsigned gateway_self_priority = 1;
         constexpr unsigned gateway_queue_size_default = 30;
-        constexpr unsigned gateway_poll_event_priority = 3;
+        constexpr unsigned gateway_poll_event_priority = 50;
 
-        const std::string app_version = "V1.1.0 BETA";
+        const std::string app_version = "V1.1.3 BETA";
         const std::string target_app = "ESP32";
         
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
@@ -202,6 +206,8 @@ namespace LSW {
             UNKNOWN             // other event not in list and not WEBSOCKET_EVENT_DATA (common data work)
         };
 
+        bool gateway_has_issues(const gateway_status&);
+
         struct unique_configuration {
             // USER CONFIG:
             std::string token;
@@ -224,6 +230,8 @@ namespace LSW {
             volatile unsigned long long heartbeat_at = 0; // right now. Use get_time_now_ms().
             unsigned long long heartbeat_interval = 45000; // this is set on GATEWAY_HELLO
             int sequence_number = -1; // -1 must be sent as 'null' (no ''). (ref: https://discord.com/developers/docs/topics/gateway#heartbeat)
+            
+            std::atomic<size_t> tasking_hint; // task is being tasked
 
             std::mutex func_mtx;
             std::function<void(const gateway_events&, const MemoryFileJSON&)> func;
@@ -251,6 +259,10 @@ namespace LSW {
             esp_websocket_client_handle_t client_handle = nullptr;
 
             unsigned long long last_gateway_send = 0; // count time, < 500 on send -> wait
+            unsigned long long last_pure_restart = 0;
+            unsigned pure_restart_short_intervals_count = 0;
+
+            void pure_restart(); // close all and "restart"
 
             void gateway_handling();
             void heartbeat_interval_auto();
@@ -268,6 +280,9 @@ namespace LSW {
             void stop();
 
             bool is_connected_and_ready() const;
+#ifdef LSW_ENABLE_AGGRESSIVE_ERROR
+            void force_restart_agressive_error();
+#endif
 
             const std::string& get_token() const;
             unsigned long long get_bot_id() const;

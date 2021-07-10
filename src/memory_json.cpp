@@ -340,6 +340,7 @@ namespace LSW {
             for (size_t curr = m_lim_beg; curr < curr_limit; curr++)
             {
                 if (skip) { skip = false; continue; }
+                //if (curr % 1000 == 0) { std::this_thread::yield(); vTaskDelay(pdMS_TO_TICKS(1)); }
 
                 const char ch = memfp[curr];
 
@@ -433,6 +434,7 @@ namespace LSW {
             for (size_t curr = m_lim_beg; curr < curr_limit; curr++)
             {
                 if (skip) { skip = false; continue; }
+                //if (curr % 1000 == 0) { std::this_thread::yield(); vTaskDelay(pdMS_TO_TICKS(1)); }
 
                 const char ch = memfp[curr];
 

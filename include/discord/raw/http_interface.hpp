@@ -52,6 +52,7 @@ namespace LSW {
             int _work(esp_http_client_event_t*);
 
             bool reconnect(const bool);
+            void reset_to(const std::string&, const esp_http_client_method_t);
         public:
             ~HttpConnection();
             // token, no messages?

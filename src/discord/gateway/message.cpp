@@ -358,6 +358,7 @@ namespace LSW {
             
             if (/*MemoryFileJSON*/ const auto it = json["id"]; !it.is_null())                   id = it.as_llu();
             if (/*MemoryFileJSON*/ const auto it = json["channel_id"]; !it.is_null())           channel_id = it.as_llu();
+            if (/*MemoryFileJSON*/ const auto it = json["parent_id"]; !it.is_null())            parent_id = it.as_llu();
             if (/*MemoryFileJSON*/ const auto it = json["guild_id"]; !it.is_null())             guild_id = it.as_llu();
             if (/*MemoryFileJSON*/ const auto it = json["content"]; !it.is_null())              content = handle_utf16(it.as_string());
             if (/*MemoryFileJSON*/ const auto it = json["timestamp"]; !it.is_null())            timestamp = it.as_string();
@@ -455,6 +456,11 @@ namespace LSW {
         unsigned long long Message::get_channel_id() const
         {
             return channel_id;
+        }
+        
+        unsigned long long Message::get_parent_id() const
+        {
+            return parent_id;
         }
         
         unsigned long long Message::get_guild_id() const
@@ -556,6 +562,12 @@ namespace LSW {
         Message& Message::set_channel_id(const unsigned long long i)
         {
             channel_id = i;
+            return *this;
+        }
+
+        Message& Message::set_parent_id(const unsigned long long i)
+        {
+            parent_id = i;
             return *this;
         }
 

@@ -35,6 +35,7 @@ namespace LSW {
             if (/*MemoryFileJSON*/ const auto it = json["joined_at"]; !it.is_null())       joined_at = it.as_string();
             if (/*MemoryFileJSON*/ const auto it = json["pending"]; !it.is_null())         pending = it.as_bool();
             if (/*MemoryFileJSON*/ const auto it = json["permissions"]; !it.is_null())     permissions = it.as_string();
+            if (/*MemoryFileJSON*/ const auto it = json["guild_id"]; !it.is_null())        guild_id = it.as_llu();
 
             if (/*MemoryFileJSON*/ const auto it = json["user"]; !it.is_null()) {
                 if (!user.load_from_json(it) && !supress_user_err) ESP_LOGW(MemberTAG, "Member::load_from_json parsing failed! User failed somewhere while parsing.");
@@ -88,7 +89,12 @@ namespace LSW {
         const std::string& Member::get_permissions() const
         {
             return permissions;
-        }        
+        }
+        
+        unsigned long long Member::get_guild_id() const
+        {
+            return guild_id;
+        }
         
         User& Member::get_user_ref()
         {

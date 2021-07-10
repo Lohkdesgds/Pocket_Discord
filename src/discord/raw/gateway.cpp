@@ -3,6 +3,11 @@
 namespace LSW {
     namespace PocketDiscord {
         
+        bool gateway_has_issues(const gateway_status& e)
+        {
+            return e == gateway_status::CLOSED || e == gateway_status::DISCONNECTED || e == gateway_status::ERROR || e == gateway_status::UNKNOWN;
+        }
+        
         gateway_commands string_to_gateway_commands(const std::string& str)
         {
             if      (str == "IDENTIFY")                 return gateway_commands::IDENTIFY;
@@ -255,7 +260,8 @@ namespace LSW {
                     }
                 }
                 if (op == gateway_opcodes::UNKNOWN){
-                    logg << L::SL << Color::RED << "[GW] OP code is UNKNOWN?! Retrying..." << L::EL;
+                    logg << L::SL << Color::RED << "[GW] OP code is UNKNOWN?! Restarting ESP32..." << L::EL;
+                    __c_gateway_got_unhandled_disconnect_so_restart("Invalid OP code");
                     continue;
                 } 
  #ifdef LSW_GATEWAY_DEBUGGING_AS_INFO
@@ -301,6 +307,50 @@ namespace LSW {
             }
         }
 
+        void GatewayControl::pure_restart()
+        {
+            logg << L::SL << Color::YELLOW << "[GW] PureRestart is restarting all possible gateway modules right now..." << L::EL;
+            unique_cfg.status = gateway_status::ERROR;
+
+            if (unique_cfg.tasking_hint > 0){
+                logg << L::SL << Color::YELLOW << "[GW] It looks like there are " << unique_cfg.tasking_hint << " tasks being done right now. Waiting up to 30 seconds..." << L::EL;
+                for(size_t p = 0; p < 30; p++) {
+                    if (unique_cfg.tasking_hint > 0) {
+                        vTaskDelay(1000 / portTICK_PERIOD_MS); // no need to go fast.
+                    }
+                    else break;
+                }
+                logg << L::SL << Color::YELLOW << "[GW] PureRestart is restarting with " << unique_cfg.tasking_hint << " tasks yet to end..." << L::EL;
+            }
+
+            unique_cfg.ready_event_got = false;
+            unique_cfg.resumed_successfully = false;
+
+            if (get_time_now_ms() - last_pure_restart < 60000) {
+                if (++pure_restart_short_intervals_count > 5){
+                    logg << L::SL << Color::YELLOW << "[GW] PureRestart detected looping. Restarting ESP32." << L::EL;
+                    __c_gateway_got_unhandled_disconnect_so_restart("PURE_RESTART detected looping."); // this is bad.
+                }
+                else {
+                    close_gateway();
+                    logg << L::SL << Color::YELLOW << "[GW] PureRestart is closing early and holding for some seconds, because things are messy..." << L::EL;
+                    vTaskDelay(pure_restart_short_intervals_count * 3000 / portTICK_PERIOD_MS); // no need to go fast.
+                    unique_cfg.session_id.clear(); // fresh start
+                }
+            }
+            else pure_restart_short_intervals_count = 0;
+
+            logg << L::SL << Color::YELLOW << "[GW] PureRestart is trying to reconnect..." << L::EL;
+
+            if (!reconnect()){
+                logg << L::SL << Color::RED << "[GW] Can't restart connection! Restarting ESP32..." << L::EL;
+                __c_gateway_got_unhandled_disconnect_so_restart("PURE_RESTART couldn't reconnect. This is bad."); // this is bad.
+            }
+            
+            logg << L::SL << Color::GREEN << "[GW] PureRestart done!" << L::EL;
+            last_pure_restart = get_time_now_ms();
+            unique_cfg.status = gateway_status::UNKNOWN;
+        }
 
         void GatewayControl::gateway_handling()
         {
@@ -320,11 +370,15 @@ namespace LSW {
 
                     switch (unique_cfg.status) { // discord.cpp -> dc_task
                     case gateway_status::RECONNECT:
+                    case gateway_status::ERROR:
+                    case gateway_status::CLOSED:
+                    case gateway_status::DISCONNECTED:
                     {
-                        if (!reconnect()){
+                        pure_restart();
+                        /*if (!reconnect()){
                             logg << L::SL << Color::RED << "[GW] Handling can't reconnect. Restarting ESP32!" << L::EL;
                             __c_gateway_got_unhandled_disconnect_so_restart("RECONNECT couldn't reconnect. This is bad."); // this is bad.
-                        }
+                        }*/
                     }
                         break;
                     case gateway_status::STARTUP:            // Started thread right now, first step.
@@ -431,7 +485,7 @@ namespace LSW {
 
                     }
                         break;
-                    case gateway_status::ERROR:              // WEBSOCKET_EVENT_ERROR
+                    /*case gateway_status::ERROR:              // WEBSOCKET_EVENT_ERROR
                         logg << L::SL << Color::YELLOW << "[GW] Detected error! Trying to recover by refresh..." << L::EL;
                         {
                             unique_cfg.ready_event_got = false;
@@ -454,7 +508,7 @@ namespace LSW {
                     case gateway_status::CLOSED:             // WEBSOCKET_EVENT_CLOSED
                         logg << L::SL << Color::YELLOW << "[GW] Closed?! Restarting ESP32!" << L::EL;
                         __c_gateway_got_unhandled_disconnect_so_restart("CLOSED in handling thread."); // this is bad.
-                        return;
+                        return;*/
                     case gateway_status::UNKNOWN:            // other event not in list and not WEBSOCKET_EVENT_DATA (common data work)
                         break; // do nothing.
                     }
@@ -492,7 +546,7 @@ namespace LSW {
                     if (esp_websocket_client_close_with_code(client_handle, 1012, nullptr, 0, gateway_max_timeout / portTICK_PERIOD_MS) != ESP_OK) { 
                         if (esp_websocket_client_stop(client_handle) != ESP_OK) {
                             logg << L::SL << Color::RED << "[GW] Can't close current connection [" << (tries + 1) << "/3]." << L::EL;
-                            vTaskDelay(1000 / portTICK_PERIOD_MS); // no rush
+                            vTaskDelay(200 / portTICK_PERIOD_MS); // no rush
                             good = false;
                         }
                         else good = true;
@@ -501,7 +555,7 @@ namespace LSW {
 
                     if (unique_cfg.confirm_close) {
                         logg << L::SL << Color::YELLOW << "[GW] CLOSE confirmation was set, assuming it's closed..." << L::EL;
-                        vTaskDelay(500 / portTICK_PERIOD_MS); // no rush
+                        vTaskDelay(100 / portTICK_PERIOD_MS); // no rush
                         good = true;
                         break;
                     }
@@ -522,7 +576,7 @@ namespace LSW {
                 }
             }
 
-            unique_cfg.status = gateway_status::UNKNOWN; // reset
+            //unique_cfg.status = gateway_status::UNKNOWN; // reset
             unique_cfg.no_gateway_please = false; // good to go.
             
             logg << L::SL << Color::GREEN << "[GW] Closed succesfully!" << L::EL;
@@ -541,8 +595,9 @@ namespace LSW {
             esp_websocket_client_config_t ws_cfg = {
                     .uri = (const char*) gateway_url,
                     .disable_auto_reconnect = true,
+                    .task_prio = gateway_self_priority,
                     .task_stack = gateway_stack_size,
-                    .buffer_size = 512,
+                    .buffer_size = gateway_buffer_size,
 #ifndef CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY
                     .cert_pem = (const char*)gateway_crt
 #endif
@@ -659,6 +714,13 @@ namespace LSW {
             return unique_cfg.ready_event_got;
         }
 
+#ifdef LSW_ENABLE_AGGRESSIVE_ERROR
+        void GatewayControl::force_restart_agressive_error()
+        {
+            unique_cfg.status = gateway_status::ERROR;
+        }
+#endif
+
         const std::string& GatewayControl::get_token() const
         {
             return unique_cfg.token;
@@ -676,6 +738,8 @@ namespace LSW {
         
         bool GatewayControl::send_command(const gateway_commands& cmd, const std::string& json_raw)
         {
+            if (unique_cfg.status != gateway_status::CONNECTED) return false; // offline, reconnecting, something.
+
             const std::string json_to_send = 
             "{"
                 "\"op\":" + std::to_string(static_cast<int>(cmd)) + ","
@@ -683,8 +747,7 @@ namespace LSW {
             "}";
 
             if (!send_raw_json(json_to_send)) {
-                unique_cfg.status = gateway_status::RECONNECT;
-                logg << L::SL << Color::GREEN << "[GW] Failed to send command (custom command)! Because of that, RESUME is needed! Please re-check your JSON!" << L::EL;
+                logg << L::SL << Color::GREEN << "[GW] Failed to send command (custom command)!" << L::EL;
                 return false;
             }
 #ifdef LSW_SHOW_JSON_SENT_CONFIRMATION_SUCCESS
@@ -717,7 +780,6 @@ namespace LSW {
                         logg << L::SL << Color::GREEN << "[GW] (no_gateway_please) Got CLOSE event." << L::EL;
                         break;
                     case WEBSOCKET_EVENT_DISCONNECTED:
-                        //unique_cfg->confirm_close = true;
                     case WEBSOCKET_EVENT_ERROR:
                         unique_cfg->ready_event_got = false;
                         logg << L::SL << Color::YELLOW << "[GW] (no_gateway_please) Got ERROR event. Ignoring..." << L::EL;
@@ -757,10 +819,17 @@ namespace LSW {
 
                             // only moves if successful.
                             if (!unique_cfg->gw_data_temp->all_good) {
-                                logg << L::SL << Color::RED << "[GW] WEBSOCKET_EVENT_DATA can't handle JSON! Restarting ESP32 soon! (" << (unique_cfg->gw_data_temp->__fporig.empty() ? "EMPTY|NULL" : (unique_cfg->gw_data_temp->__fporig.substr(0, 2048) + (unique_cfg->gw_data_temp->__fporig.size() > 2048 ? "..." : ""))) << ")" << L::EL;
-                                                                
-                                vTaskDelay(2000 / portTICK_PERIOD_MS); // no rush
-                                __c_gateway_got_unhandled_disconnect_so_restart("__c_gateway_redirect_event could not handle JSON."); // sorry ma'am
+                                //logg << L::SL << Color::RED << "[GW] WEBSOCKET_EVENT_DATA can't handle JSON! Restarting ESP32 soon! (" << (unique_cfg->gw_data_temp->__fporig.empty() ? "EMPTY|NULL" : (unique_cfg->gw_data_temp->__fporig.substr(0, 2048) + (unique_cfg->gw_data_temp->__fporig.size() > 2048 ? "..." : ""))) << ")" << L::EL;
+                                logg << L::SL << Color::RED << "[GW] WEBSOCKET_EVENT_DATA can't handle JSON! Trying to recover via pure restart method!" << L::EL;
+                                
+                                unique_cfg->status = gateway_status::ERROR;
+                                unique_cfg->confirm_close = true;
+                                unique_cfg->ready_event_got = false;
+
+                                return;
+
+                                /*vTaskDelay(2000 / portTICK_PERIOD_MS); // no rush
+                                __c_gateway_got_unhandled_disconnect_so_restart("__c_gateway_redirect_event could not handle JSON."); // sorry ma'am*/
                             }
                             unique_cfg->event_buffer_fp.clear();
                             // good.
@@ -855,19 +924,20 @@ namespace LSW {
                                         logg << L::SL << Color::BRIGHT_GRAY << "[GW] JSON being posted:\n" << (unique_cfg->gw_data_temp->__fporig.empty() ? "EMPTY|NULL" : (unique_cfg->gw_data_temp->__fporig.substr(0, 2048) + (unique_cfg->gw_data_temp->__fporig.size() > 2048 ? "..." : ""))) << L::EL;
 #endif
 
-                                        unique_cfg->async_task.post([&func = unique_cfg->func, gww = unique_cfg->gw_data_temp]{
+                                        unique_cfg->async_task.post([&tasking_hint = unique_cfg->tasking_hint, &func = unique_cfg->func, gww = unique_cfg->gw_data_temp]{
 #ifdef LSW_SHOW_JSON_BEING_SENT
                                             logg << L::SL << Color::BRIGHT_GRAY << "[GW] JSON got posted:\n" << (gww->__fporig.empty() ? "EMPTY|NULL" : (gww->__fporig.substr(0, 2048) + (gww->__fporig.size() > 2048 ? "..." : ""))) << L::EL;
                                             const auto jj = gww->json["d"];
                                             //logg << L::SL << Color::BRIGHT_GRAY << "[GW] JSON [\"d\"]:\n" << (jj.empty() ? "EMPTY|NULL" : jj.get_memfp().substr(0, 2048)) << L::EL;
-#endif
+#endif                                      
+                                            tasking_hint++;
                                             func(gww->t, gww->json["d"]);
+                                            if (tasking_hint > 0) tasking_hint--;
                                         });
                                         
 #ifdef LSW_SHOW_DETAILED_EVENTS
                                         logg << L::SL << Color::BLUE << "[GW] Added one async task. Tasks to do: " << unique_cfg->async_task.queue_size_now() << L::EL;
 #endif
-                                        //unique_cfg->func(unique_cfg->gw_data_temp.t, unique_cfg->gw_data_temp.json["d"]);
                                     }
                                     else {
                                         logg << L::SL << Color::YELLOW << "[GW] No function set to handle events. Skipped event." << L::EL;
@@ -890,7 +960,7 @@ namespace LSW {
                             case gateway_opcodes::INVALID_SESSION:        //  8 [RECEIVE]        // The session has been invalidated. You should reconnect and identify/resume accordingly.
                             {
                                 logg << L::SL << Color::YELLOW << "[GW] Got INVALID_SESSION event, trying to RESUME..." << L::EL;
-                                unique_cfg->status = gateway_status::RECONNECT; // other thread should reconnect
+                                unique_cfg->status = gateway_status::ERROR; // other thread should reconnect
                                 unique_cfg->ready_event_got = false;
                             }
                                 break;
@@ -904,15 +974,12 @@ namespace LSW {
                                     unique_cfg->heartbeat_interval = it.as_int();
                                     //unique_cfg->ack_heartbeat = get_time_now_ms(); // no error please.
                                     
-                                    if (unique_cfg->heartbeat_interval < 1000) {
+                                    if (unique_cfg->heartbeat_interval < 500) {
                                         logg << L::SL << Color::RED << "[GW] Heartbeat wasn't good (" << unique_cfg->heartbeat_interval << ")?! Restarting ESP32..." << L::EL;
                                         logg << L::SL << Color::RED << "[GW] JSON: " << (unique_cfg->gw_data_temp->__fporig.empty() ? "EMPTY|NULL" : (unique_cfg->gw_data_temp->__fporig.substr(0, 2048) + (unique_cfg->gw_data_temp->__fporig.size() > 2048 ? "..." : ""))) << L::EL;
-                                        vTaskDelay(4000 / portTICK_PERIOD_MS); // no rush
+                                        vTaskDelay(500 / portTICK_PERIOD_MS); // no rush
                                         __c_gateway_got_unhandled_disconnect_so_restart("Couldn't handle HELLO somehow."); // dies.
                                     }
-
-                                    //unique_cfg->ack_heartbeat = get_time_now_ms(); // no error please.
-                                    //unique_cfg->heartbeat_at = get_time_now_ms() + 1000; // one second after this
                                     unique_cfg->status = gateway_status::STARTUP;
                                     logg << L::SL << Color::GREEN << "[GW] HELLO is GOOD with Heartbeat interval at " << unique_cfg->heartbeat_interval << "!" << L::EL;
                                 }
@@ -938,22 +1005,28 @@ namespace LSW {
                     }
                     return;            
                 case WEBSOCKET_EVENT_ERROR:
-                    logg << L::SL << Color::RED << "[GW] CONNECTION ERROR! Restarting fresh..." << L::EL;
+                    logg << L::SL << Color::RED << "[GW] CONNECTION ERROR! Trying the restart pure method." << L::EL;
                     unique_cfg->status = gateway_status::ERROR;
+                    unique_cfg->confirm_close = true;
                     unique_cfg->ready_event_got = false;
-                    __c_gateway_got_unhandled_disconnect_so_restart("Gateway got ERROR event"); // dies.
+                    /*unique_cfg->status = gateway_status::ERROR;
+                    unique_cfg->ready_event_got = false;
+                    __c_gateway_got_unhandled_disconnect_so_restart("Gateway got ERROR event"); // dies.*/
                     return;
                 case WEBSOCKET_EVENT_DISCONNECTED:
-                    logg << L::SL << Color::RED << "[GW] DISCONNECTED! Trying to clear current connection..." << L::EL;
-                    unique_cfg->status = gateway_status::ERROR;
+                    logg << L::SL << Color::RED << "[GW] DISCONNECTED! Trying the restart pure method..." << L::EL;
+                    unique_cfg->status = gateway_status::CLOSED;
                     unique_cfg->confirm_close = true;
                     unique_cfg->ready_event_got = false;
                     return;
                 case WEBSOCKET_EVENT_CLOSED:
-                    logg << L::SL << Color::RED << "[GW] CONNECTION CLOSED! Trying to RESUME..." << L::EL;
-                    unique_cfg->status = gateway_status::RECONNECT;
+                    logg << L::SL << Color::RED << "[GW] CONNECTION CLOSED! Trying the restart pure method..." << L::EL;
+                    unique_cfg->status = gateway_status::CLOSED;
                     unique_cfg->confirm_close = true;
                     unique_cfg->ready_event_got = false;
+                    /*unique_cfg->status = gateway_status::RECONNECT;
+                    unique_cfg->confirm_close = true;
+                    unique_cfg->ready_event_got = false;*/
                     return;                
                 default:
                     logg << L::SL << Color::YELLOW << "[GW] Unknown Gateway event. Skipping." << L::EL;
@@ -962,15 +1035,15 @@ namespace LSW {
             }
             catch(const std::exception& e)
             {
-                logg << L::SL << Color::RED << "[GW] Fatal exception: " << e.what() << ". Trying to RESUME in one second..." << L::EL;
-                vTaskDelay(1000 / portTICK_PERIOD_MS); // no need to go fast.
-                unique_cfg->status = gateway_status::RECONNECT;//unique_cfg->status = gateway_status::CLOSED;
+                logg << L::SL << Color::RED << "[GW] Fatal exception: " << e.what() << ". Trying to recover..." << L::EL;
+                //vTaskDelay(1000 / portTICK_PERIOD_MS); // no need to go fast.
+                unique_cfg->status = gateway_status::ERROR;
             }
             catch(...)
             {
-                logg << L::SL << Color::RED << "[GW] Fatal exception: (UNCAUGHT). Trying to RESUME in one second..." << L::EL;
-                vTaskDelay(1000 / portTICK_PERIOD_MS); // no need to go fast.
-                unique_cfg->status = gateway_status::RECONNECT;//unique_cfg->status = gateway_status::CLOSED;
+                logg << L::SL << Color::RED << "[GW] Fatal exception: (UNCAUGHT). Trying to recover..." << L::EL;
+                //vTaskDelay(1000 / portTICK_PERIOD_MS); // no need to go fast.
+                unique_cfg->status = gateway_status::ERROR;
             }
         }
 

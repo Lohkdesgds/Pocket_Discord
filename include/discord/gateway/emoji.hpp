@@ -23,6 +23,9 @@ namespace LSW {
 
             std::string encoded_name() const; // only needed if id == 0
         public:
+            Emoji() = default;
+            Emoji(const std::string&, const unsigned long long, const bool);
+
             std::string to_json() const;
             std::string format_text() const;
             std::string format_react() const;

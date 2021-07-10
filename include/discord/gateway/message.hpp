@@ -149,6 +149,7 @@ namespace LSW {
 
             unsigned long long id = 0;
             unsigned long long channel_id = 0;
+            unsigned long long parent_id = 0; // category (for guild channels), channel parent (if thread)
             unsigned long long guild_id = 0; // optional
             Member member; // author is used here.
             std::string content;
@@ -169,6 +170,7 @@ namespace LSW {
 
             unsigned long long get_id() const;
             unsigned long long get_channel_id() const;
+            unsigned long long get_parent_id() const;
             unsigned long long get_guild_id() const;
             const User& get_author() const;
             const Member& get_member() const;
@@ -190,6 +192,7 @@ namespace LSW {
 
             Message& set_id(const unsigned long long);
             Message& set_channel_id(const unsigned long long);
+            Message& set_parent_id(const unsigned long long);
             Message& set_guild_id(const unsigned long long);
             Message& set_content(const std::string&);
             std::vector<Attachment> get_attachments_ref();

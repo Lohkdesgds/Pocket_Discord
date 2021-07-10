@@ -26,6 +26,11 @@ namespace LSW {
 
             return escaped.str();
         }
+        
+        Emoji::Emoji(const std::string& a, const unsigned long long b, const bool c)
+            : name(a), id(b), animated(c)
+        {
+        }
 
         std::string Emoji::to_json() const
         {
