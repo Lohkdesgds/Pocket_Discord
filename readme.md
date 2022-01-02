@@ -1,3 +1,7 @@
+### I can't keep this working for now [ARCHIVED]. The limitations are big, and I won't have the time to keep this up to date. Sorry about that.
+### Consider using a *Raspberry PI* with D++ library (https://github.com/brainboxdotcc/DPP) instead. It uses low memory and it's very simple to use, but too much to an ESP32 still.
+<br>
+
 # PocketDiscord C++ Discord Bot Library
 
 *This is a library I've been working on for a while. I wanted a cool great Discord bot running on a simple and cheap ESP32, and so I searched for it for a while... There was one guy, but most of the API was limited or non existant, and it was just C, and it was so memory hungry, oh my god.*
