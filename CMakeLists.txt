@@ -25,6 +25,7 @@ idf_component_register(
     SRCS 
         src/ledhandler.cpp
         src/exception.cpp
+        src/jsoninterface.cpp
         src/eventhandler.cpp
         src/heapstring.cpp
         src/filehandler.cpp

@@ -8,6 +8,8 @@
 #include "esp_transport_ws.h"
 
 #include "../eventhandler.h"
+#include "heapstring.h"
+#include "jsoninterface.h"
 
 
 namespace Lunaris {
@@ -150,5 +152,104 @@ namespace Lunaris {
         };
         static gateway_events str2gateway_events(const char*);
 
+        // from Discord @ https://discord.com/developers/docs/topics/gateway#gateway-intents
+        enum class gateway_intents : uint32_t {
+            NONE                            = 0,
+            GUILDS                          = (1 << 0),
+            GUILD_MEMBERS                   = (1 << 1),
+            GUILD_MODERATION                = (1 << 2),
+            GUILD_EMOJIS_AND_STICKERS       = (1 << 3),
+            GUILD_INTEGRATIONS              = (1 << 4),
+            GUILD_WEBHOOKS                  = (1 << 5),
+            GUILD_INVITES                   = (1 << 6),
+            GUILD_VOICE_STATES              = (1 << 7),
+            GUILD_PRESENCES                 = (1 << 8),
+            GUILD_MESSAGES                  = (1 << 9),
+            GUILD_MESSAGE_REACTIONS         = (1 << 10),
+            GUILD_MESSAGE_TYPING            = (1 << 11),
+            DIRECT_MESSAGES                 = (1 << 12),
+            DIRECT_MESSAGE_REACTIONS        = (1 << 13),
+            DIRECT_MESSAGE_TYPING           = (1 << 14),
+            MESSAGE_CONTENT                 = (1 << 15),
+            GUILD_SCHEDULED_EVENTS          = (1 << 16),
+            AUTO_MODERATION_CONFIGURATION   = (1 << 20),
+            AUTO_MODERATION_EXECUTION       = (1 << 21)
+        };
+
+        static gateway_intents operator|(const gateway_intents&, const gateway_intents&);
+
+        // mine, based on ESP gateway response possibilites.
+        enum class gateway_status {
+            UNKNOWN,            // other event not in list and not WEBSOCKET_EVENT_DATA (common data work)
+            RECONNECT,          // Had it running, Discord called RECONNECT
+            STARTUP,            // Started thread right now, first step.
+            CONNECTED,          // WEBSOCKET_EVENT_CONNECTED
+            ERROR,              // WEBSOCKET_EVENT_ERROR
+            DISCONNECTED,       // WEBSOCKET_EVENT_DISCONNECTED
+            CLOSED              // WEBSOCKET_EVENT_CLOSED
+        };
+        
+
+        struct gateway_payload_structure {
+            char* d = nullptr;          // payload
+            const size_t d_len = 0;     // total payload length
+            gateway_opcodes op;
+            long long s = -1;       
+            gateway_events t;
+            pJSON* j = nullptr;
+
+            gateway_payload_structure(const gateway_payload_structure&) = delete;
+            gateway_payload_structure(gateway_payload_structure&&) = delete;
+            void operator=(const gateway_payload_structure&) = delete;
+            void operator=(gateway_payload_structure&&) = delete;
+
+
+            // get payload length and allocate memory for receiving it.
+            gateway_payload_structure(const size_t);
+            ~gateway_payload_structure();
+
+            // append <data> with <length> size at <offset>. Automatic parse if (offset + length == this->d_len)
+            bool append(const char*, size_t, size_t);
+            // free all memory
+            void free();
+        };
+
+
+        class Gateway {
+        public:
+	        typedef void(*event_handler)(const gateway_events&, const pJSON&);
+
+            struct gateway_data {
+                // === // USER SET DATA // ==================================================================
+                gateway_intents m_intents;
+                HeapString m_token;
+                event_handler m_event_handler;
+
+                // === // DATA OF BOT // ==================================================================
+                HeapString m_session_id;
+                HeapString m_bot_string;
+                uint64_t m_bot_id = 0;
+                
+                // === // HEARTBEAT RELATED // ==================================================================
+                unsigned m_heartbeat_interval_ms = 0; // if no heartbeat ack after this, reconnect.
+                int m_last_sequence_number = -1; // if last_sequence_number_set == false, consider this null.
+                bool m_heartbeat_got_confirm = true; // on heartbeat sent, set false. If next heartbeat this is false, reconnect.
+                
+                // === // WORKING DATA // ==================================================================
+                gateway_status m_status = gateway_status::UNKNOWN;
+                gateway_payload_structure* m_pay_work = nullptr;
+                EventHandler m_event_loop{"GATEWAY_HANDLER"};
+
+                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
+            };
+        private:
+            gateway_data data;
+        public:
+            // token, gateway
+            Gateway(const char* token, const gateway_intents, const event_handler);
+            ~Gateway();
+
+            void stop();
+        };
     }
 }

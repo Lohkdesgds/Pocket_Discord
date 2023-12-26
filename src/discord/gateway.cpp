@@ -1,8 +1,17 @@
 #include "discord/gateway.hpp"
+
 #include <unordered_map>
+#include <memory>
+#include <cJSON.h>
+#include "esp_log.h"
+
+#include "jsoninterface.h"
+#include "defaults.h"
 
 namespace Lunaris {
     namespace PocketDiscord {
+
+        static const char TAG[] = "GATEWAY";
         
         gateway_opcodes str2gateway_opcode(const char* s)
         {
@@ -25,10 +34,10 @@ namespace Lunaris {
             return gateway_opcodes::UNKNOWN;
         }
 
-        gateway_close_event_codes str2gateway_opcode(const char* s)
+        gateway_close_event_codes str2gateway_close_event_codes(const char* s)
         {
             // size: 80 bytes + dynamic alloc
-            static std::unordered_map<const char*, gateway_close_event_codes> const gateway_opcodes_map = {
+            static std::unordered_map<const char*, gateway_close_event_codes> const map = {
                 { "UNKNOWN_ERROR"             , gateway_close_event_codes::UNKNOWN_ERROR },
                 { "UNKNOWN_OPCODE"            , gateway_close_event_codes::UNKNOWN_OPCODE },
                 { "DECODE_ERROR"              , gateway_close_event_codes::DECODE_ERROR },
@@ -46,14 +55,14 @@ namespace Lunaris {
             };
 
             if (const auto& it = map.find(s); it != map.end()) return it->second;
-            return gateway_opcodes::UNKNOWN_ERROR;
+            return gateway_close_event_codes::UNKNOWN_ERROR;
         }
 
 
         gateway_send_events str2gateway_send_events(const char* s)
         {
             // size: 80 bytes + dynamic alloc
-            static std::unordered_map<const char*, gateway_send_events> const gateway_opcodes_map = {
+            static std::unordered_map<const char*, gateway_send_events> const map = {
                 { "UNKNOWN"                    , gateway_send_events::UNKNOWN },
                 { "IDENTIFY"                   , gateway_send_events::IDENTIFY },
                 { "RESUME"                     , gateway_send_events::RESUME },
@@ -70,7 +79,7 @@ namespace Lunaris {
         gateway_events str2gateway_events(const char* s)
         {
             // size: 80 bytes + dynamic alloc
-            static std::unordered_map<const char*, gateway_events> const gateway_opcodes_map = {
+            static std::unordered_map<const char*, gateway_events> const map = {
                 { "UNKNOWN"                                 , gateway_events::UNKNOWN},
                 { "HELLO"                                   , gateway_events::HELLO},
                 { "READY"                                   , gateway_events::READY},
@@ -143,6 +152,66 @@ namespace Lunaris {
 
             if (const auto& it = map.find(s); it != map.end()) return it->second;
             return gateway_events::UNKNOWN;
+        }
+        
+        gateway_intents operator|(const gateway_intents& a, const gateway_intents& b)
+        {
+            return static_cast<gateway_intents>(static_cast<std::underlying_type_t<gateway_intents>>(a) | static_cast<std::underlying_type_t<gateway_intents>>(b));
+        }
+
+
+        gateway_payload_structure::gateway_payload_structure(const size_t payload_len)
+            : d(new char[payload_len]), d_len(payload_len)
+        {}
+
+        gateway_payload_structure::~gateway_payload_structure()
+        {
+            free();
+        }
+
+        bool gateway_payload_structure::append(const char* data, const size_t length, const size_t offset)
+        {
+            if (!d) return false;
+
+            memcpy(d + offset, data, length);
+
+            // Got to end?
+            if (offset + length == d_len) { 
+                j = new pJSON(d, d_len);
+                DEL_EM(d);
+            }
+
+            return true;
+        }
+
+        void gateway_payload_structure::free()
+        {
+            DEL_EM(d);
+            DEL_IT(j);
+        }
+
+
+        Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
+            : m_intents(intents), m_token(token), m_event_handler(evhlr)
+        {
+        }
+
+        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
+            : data(token, intents, evhlr)
+        {
+            ESP_LOGI(TAG, "Initializing Gateway version %s for %s...", app_version, target_app);
+
+            ESP_LOGI(TAG, "Initialized Gateway.");
+        }
+
+        Gateway::~Gateway()
+        {
+            stop();
+        }
+        
+        void Gateway::stop()
+        {
+
         }
 
     }
