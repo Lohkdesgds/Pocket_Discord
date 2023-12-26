@@ -3,11 +3,11 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
-#include "heapstring.h"
-#include "filehandler.h"
-#include "functionwrapper.h"
-#include "ledhandler.h"
-#include "eventhandler.h"
+#include "../heapstring.h"
+#include "../filehandler.h"
+#include "../functionwrapper.h"
+#include "../ledhandler.h"
+#include "../eventhandler.h"
 
 namespace Lunaris {
     namespace PocketDiscord {
