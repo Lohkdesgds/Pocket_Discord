@@ -1,4 +1,5 @@
 #include "heapstring.h"
+#include "defaults.h"
 
 #include <string.h>
 
@@ -61,8 +62,7 @@ size_t HeapString::size() const
 
 void HeapString::free()
 {    
-    if (mem) delete[] mem;
-    mem = nullptr;
+    DEL_EM(mem);
     len = 0;
 }
 

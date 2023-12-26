@@ -1,4 +1,5 @@
 #include "functionwrapper.h"
+#include "defaults.h"
 
 FunctionWrapper::FunctionWrapper(FunctionWrapper::func f, void* arg, FunctionWrapper::func free_arg)
 	: m_fcn(f), m_free(free_arg), m_arg(arg)
@@ -20,12 +21,9 @@ FunctionWrapper::FunctionWrapper(FunctionWrapper&& o) noexcept
 void FunctionWrapper::operator=(FunctionWrapper&& o) noexcept
 {
 	free();
-	m_fcn = o.m_fcn;
-	m_free = o.m_free;
-	m_arg = o.m_arg;
-	o.m_fcn = nullptr;
-	o.m_free = nullptr;
-	o.m_arg = nullptr;
+	EXC_NULL(m_fcn, o.m_fcn);
+	EXC_NULL(m_free, o.m_free);
+	EXC_NULL(m_arg, o.m_arg);
 }
 
 void FunctionWrapper::set(FunctionWrapper::func f, void* arg, FunctionWrapper::func free_arg)
