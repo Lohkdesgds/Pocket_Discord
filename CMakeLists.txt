@@ -29,6 +29,7 @@ idf_component_register(
         src/heapstring.cpp
         src/filehandler.cpp
         src/functionwrapper.cpp
+        src/discord/gateway.cpp
         src/discord/core.cpp
     INCLUDE_DIRS include
     REQUIRES json esp_wifi esp_websocket_client esp_http_client lwip esp_netif

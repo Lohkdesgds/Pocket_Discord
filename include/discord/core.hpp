@@ -9,6 +9,8 @@
 #include "../ledhandler.h"
 #include "../eventhandler.h"
 
+#include "gateway.hpp"
+
 namespace Lunaris {
     namespace PocketDiscord {
         
