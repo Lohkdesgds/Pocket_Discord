@@ -20,3 +20,5 @@
 #define EXCHANGE(TARG, FROM, FROM_VAL) { TARG = FROM; FROM = FROM_VAL; }
 // TARG << FROM, FROM << NULL
 #define EXC_NULL(TARG, FROM) EXCHANGE(TARG, FROM, nullptr)
+
+#define READFILE_FULLY_TO(HEAP_OBJ, FILE_TO_READ_PATH, THROW_ERR_STR) { File fp(FILE_TO_READ_PATH, "rb"); if (!fp) throw Exception(THROW_ERR_STR); char _____minbuf[32]; while(!fp.eof()) { const size_t rd = fp.read(_____minbuf, 32); if (rd == 0) { break; } HEAP_OBJ.append(_____minbuf, rd); } fp.close(); }

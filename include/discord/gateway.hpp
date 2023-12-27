@@ -16,16 +16,20 @@ namespace Lunaris {
     namespace PocketDiscord {
 
         const char gateway_url[] = "wss://gateway.discord.gg/?v=10&encoding=json";
+
         constexpr int gateway_max_timeout = 5000;
-        constexpr size_t gateway_stack_size = 6 * 1024;
+        constexpr size_t gateway_stack_size = 6 * 1024;         // USING
         constexpr size_t gateway_poll_stack_size = 16 * 1024;
-        constexpr size_t gateway_buffer_size = 4096;
-        constexpr unsigned gateway_self_priority = 1;
+        constexpr size_t gateway_buffer_size = 4096;            // USING
+
+        constexpr unsigned gateway_self_priority = 1;           // USING
         constexpr unsigned gateway_queue_size_default = 30;
         constexpr unsigned gateway_poll_event_priority = 50;
         
         const char app_version[] = "V2.0.0 ALPHA";
         const char target_app[] = "ESP32";
+
+        const char cert_gateway_path[] = "cert/gateway.pem";
         
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
         enum class gateway_opcodes : int16_t {
@@ -224,6 +228,7 @@ namespace Lunaris {
                 gateway_intents m_intents;
                 HeapString m_token;
                 event_handler m_event_handler;
+                HeapString m_gateway_cert_perm;
 
                 // === // DATA OF BOT // ==================================================================
                 HeapString m_session_id;
@@ -236,6 +241,7 @@ namespace Lunaris {
                 bool m_heartbeat_got_confirm = true; // on heartbeat sent, set false. If next heartbeat this is false, reconnect.
                 
                 // === // WORKING DATA // ==================================================================
+                esp_websocket_client_handle_t m_client_handle = nullptr;
                 gateway_status m_status = gateway_status::UNKNOWN;
                 gateway_payload_structure* m_pay_work = nullptr;
                 EventHandler m_event_loop{"GATEWAY_HANDLER"};

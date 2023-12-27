@@ -31,12 +31,12 @@ namespace Lunaris {
 
         static const char TAG[] = u8"🤖 ⇒";
         
-        volatile Bot::sc_nvs*   Bot::m_nvs = nullptr;
-        volatile Bot::sc_eloop* Bot::m_eloop = nullptr;
-        volatile Bot::sc_sd*    Bot::m_sd = nullptr;
-        volatile Bot::sc_wifi*  Bot::m_wifi = nullptr;
-        volatile Bot::sc_ntp*   Bot::m_ntp = nullptr;
-        volatile size_t         Bot::m_bots = 0;
+        volatile BotBase::sc_nvs*   BotBase::m_nvs = nullptr;
+        volatile BotBase::sc_eloop* BotBase::m_eloop = nullptr;
+        volatile BotBase::sc_sd*    BotBase::m_sd = nullptr;
+        volatile BotBase::sc_wifi*  BotBase::m_wifi = nullptr;
+        volatile BotBase::sc_ntp*   BotBase::m_ntp = nullptr;
+        volatile size_t         BotBase::m_BotBases = 0;
 
         void eternal_flash_death(const error_codes signal = error_codes::NONE)
         {
@@ -93,7 +93,7 @@ namespace Lunaris {
         }
 
 
-        Bot::sc_nvs::sc_nvs()
+        BotBase::sc_nvs::sc_nvs()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] NVS FLASH INIT");
@@ -106,7 +106,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"[✅] NVS FLASH INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
         }
-        Bot::sc_nvs::~sc_nvs()
+        BotBase::sc_nvs::~sc_nvs()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] NVS FLASH DEINIT");
@@ -115,7 +115,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"==================================================");
         }
 
-        Bot::sc_eloop::sc_eloop()
+        BotBase::sc_eloop::sc_eloop()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] EVENT LOOP INIT");
@@ -124,7 +124,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"[✅] EVENT LOOP INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
         }
-        Bot::sc_eloop::~sc_eloop()
+        BotBase::sc_eloop::~sc_eloop()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] EVENT LOOP DEINIT");
@@ -134,7 +134,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"==================================================");
         }
 
-        Bot::sc_sd::sc_sd()
+        BotBase::sc_sd::sc_sd()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] SD CARD INIT");
@@ -185,7 +185,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"[✅] SD CARD INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
         }
-        Bot::sc_sd::~sc_sd()
+        BotBase::sc_sd::~sc_sd()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] SD CARD DEINIT");
@@ -199,7 +199,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"==================================================");
         }
 
-        Bot::sc_wifi::sc_wifi()
+        BotBase::sc_wifi::sc_wifi()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] WIFI INIT");
@@ -284,7 +284,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"[✅] WIFI INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
         }
-        Bot::sc_wifi::~sc_wifi()
+        BotBase::sc_wifi::~sc_wifi()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] WIFI DEINIT");
@@ -299,7 +299,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"==================================================");
         }
 
-        Bot::sc_ntp::sc_ntp()
+        BotBase::sc_ntp::sc_ntp()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] NTP SERVICE INIT");
@@ -337,7 +337,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, u8"[✅] NTP SERVICE INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
         }
-        Bot::sc_ntp::~sc_ntp()
+        BotBase::sc_ntp::~sc_ntp()
         {
             ESP_LOGI(TAG, u8"==================================================");
             ESP_LOGI(TAG, u8"[▶️] NTP SERVICE DEINIT");
@@ -347,13 +347,21 @@ namespace Lunaris {
         }
 
 
-    /// ==================== BOT MANAGER CODE HERE ==================== ///
+    /// ==================== BotBase MANAGER CODE HERE ==================== ///
 
 
+        BotBase::BotSelf::BotSelf(Gateway* g)
+            : m_gateway(g)
+        {}
 
-        Bot::Bot()
+        BotBase::BotSelf::~BotSelf()
         {
-            ESP_LOGI(TAG, "Starting bot...");
+            DEL_IT(m_gateway);
+        }
+
+        BotBase::BotBase()
+        {
+            ESP_LOGI(TAG, "Starting BotBase...");
 
             if (get_cpu_clock() != 240000000) {
                 ESP_LOGW(TAG, u8"==================================================");
@@ -375,12 +383,17 @@ namespace Lunaris {
             set_led(true);
         }
 
-        Bot::~Bot()
+        BotBase::~BotBase()
         {
             destroy();
         }
 
-        void Bot::destroy()
+        BotBase::BotSelf BotBase::make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler)
+        {
+            return BotBase::BotSelf(new Gateway(token, intents, function_handler));
+        }
+
+        void BotBase::destroy()
         {
             if (m_ntp)   { delete m_ntp;   m_ntp = nullptr; }
             if (m_wifi)  { delete m_wifi;  m_wifi = nullptr; }
@@ -390,14 +403,14 @@ namespace Lunaris {
             set_led(false);
         }
 
-        uint32_t Bot::get_cpu_clock()
+        uint32_t BotBase::get_cpu_clock()
         {        
             uint32_t val;
             esp_clk_tree_src_get_freq_hz(SOC_MOD_CLK_CPU, ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX, &val);
             return val;
         }
 
-        ram_info Bot::get_ram_info()
+        ram_info BotBase::get_ram_info()
         {
             return ram_info();
         }

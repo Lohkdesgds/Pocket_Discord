@@ -9,7 +9,7 @@
 #include "../ledhandler.h"
 #include "../eventhandler.h"
 
-#include "gateway.hpp"
+#include "discord/gateway.hpp"
 
 namespace Lunaris {
     namespace PocketDiscord {
@@ -44,7 +44,17 @@ namespace Lunaris {
             ram_info();
         };
 
-        class Bot {
+        class BotBase {
+        public:
+        
+            class BotSelf {
+                Gateway* m_gateway;
+            public:
+                BotSelf(Gateway*);
+                ~BotSelf();
+            };
+
+        private:
             struct sc_nvs {
                 sc_nvs();
                 ~sc_nvs();
@@ -78,10 +88,12 @@ namespace Lunaris {
             static volatile sc_sd*    m_sd;
             static volatile sc_wifi*  m_wifi;
             static volatile sc_ntp*   m_ntp;
-            static volatile size_t    m_bots;
+            static volatile size_t    m_BotBases;
         public:
-            Bot();
-            ~Bot();
+            BotBase();
+            ~BotBase();
+
+            static BotBase::BotSelf make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler);
 
             void destroy();
 
@@ -95,10 +107,10 @@ namespace Lunaris {
 
 
         //
-        //class Bot {
+        //class BotBase {
         //public:
-        //    Bot();
-        //    ~Bot();
+        //    BotBase();
+        //    ~BotBase();
         //};
     }
 }

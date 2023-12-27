@@ -7,6 +7,8 @@
 
 #include "jsoninterface.h"
 #include "defaults.h"
+#include "filehandler.h"
+#include "exception.h"
 
 namespace Lunaris {
     namespace PocketDiscord {
@@ -194,12 +196,33 @@ namespace Lunaris {
         Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
             : m_intents(intents), m_token(token), m_event_handler(evhlr)
         {
+            ESP_LOGI(TAG, "Gateway data is working... Loading certificates...");
+                        
+            READFILE_FULLY_TO(m_gateway_cert_perm, cert_gateway_path, "Could not load gateway certificate.");
+
+            ESP_LOGI(TAG, "Certificate file loaded:\n\n%s\n", m_gateway_cert_perm.c_str());
+
+            ESP_LOGI(TAG, "Gateway data structure is ready.");
         }
 
         Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
             : data(token, intents, evhlr)
         {
             ESP_LOGI(TAG, "Initializing Gateway version %s for %s...", app_version, target_app);
+
+            //esp_websocket_client_config_t ws_cfg = {
+            //    .uri = (const char*) gateway_url,
+            //    .disable_auto_reconnect = true,
+            //    .task_prio = gateway_self_priority,
+            //    .task_stack = gateway_stack_size,
+            //    .buffer_size = gateway_buffer_size,
+            //    .cert_pem = data.m_gateway_cert_perm.c_str()
+            //};
+//
+            //if (!(data.m_client_handle = esp_websocket_client_init(&ws_cfg))) {
+//
+            //}
+
 
             ESP_LOGI(TAG, "Initialized Gateway.");
         }
