@@ -32,8 +32,9 @@ idf_component_register(
         src/functionwrapper.cpp
         src/discord/gateway.cpp
         src/discord/core.cpp
-    INCLUDE_DIRS include
-    REQUIRES json esp_wifi esp_websocket_client esp_http_client lwip esp_netif
+        deps/cJSONL/cJSON.c
+    INCLUDE_DIRS include deps
+    REQUIRES esp_wifi esp_websocket_client esp_http_client lwip esp_netif
     PRIV_REQUIRES app_update nvs_flash fatfs
     #EMBED_TXTFILES ${CERTS}
 )

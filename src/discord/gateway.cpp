@@ -2,8 +2,8 @@
 
 #include <unordered_map>
 #include <memory>
-#include <cJSON.h>
 #include "esp_log.h"
+#include <time.h>
 
 #include "jsoninterface.h"
 #include "defaults.h"
@@ -14,6 +14,8 @@ namespace Lunaris {
     namespace PocketDiscord {
 
         static const char TAG[] = "GATEWAY";
+        
+        void __c_gateway_redirect_event(void*, esp_event_base_t, int32_t, void*);
         
         gateway_opcodes str2gateway_opcode(const char* s)
         {
@@ -160,6 +162,31 @@ namespace Lunaris {
         {
             return static_cast<gateway_intents>(static_cast<std::underlying_type_t<gateway_intents>>(a) | static_cast<std::underlying_type_t<gateway_intents>>(b));
         }
+        
+
+        gateway_status_binary operator+=(gateway_status_binary& a, const gateway_status_binary& b)
+        {
+            return a = static_cast<gateway_status_binary>(static_cast<std::underlying_type_t<gateway_status_binary>>(a) | static_cast<std::underlying_type_t<gateway_status_binary>>(b));
+        }
+
+        gateway_status_binary operator-=(gateway_status_binary& a, const gateway_status_binary& b)
+        {
+            return a = static_cast<gateway_status_binary>(static_cast<std::underlying_type_t<gateway_status_binary>>(a) & ~static_cast<std::underlying_type_t<gateway_status_binary>>(b));
+        }
+
+        gateway_status_binary operator+(const gateway_status_binary& a, const gateway_status_binary& b)
+        {
+            return static_cast<gateway_status_binary>(static_cast<std::underlying_type_t<gateway_status_binary>>(a) | static_cast<std::underlying_type_t<gateway_status_binary>>(b));
+        }
+
+        gateway_status_binary operator-(const gateway_status_binary& a, const gateway_status_binary& b)
+        {
+            return static_cast<gateway_status_binary>(static_cast<std::underlying_type_t<gateway_status_binary>>(a) & ~static_cast<std::underlying_type_t<gateway_status_binary>>(b));
+        }
+        gateway_status_binary operator&(const gateway_status_binary& a, const gateway_status_binary& b)
+        {
+            return static_cast<gateway_status_binary>(static_cast<std::underlying_type_t<gateway_status_binary>>(a) & static_cast<std::underlying_type_t<gateway_status_binary>>(b));
+        }
 
 
         gateway_payload_structure::gateway_payload_structure(const size_t payload_len)
@@ -171,9 +198,9 @@ namespace Lunaris {
             free();
         }
 
-        bool gateway_payload_structure::append(const char* data, const size_t length, const size_t offset)
+        int gateway_payload_structure::append(const char* data, const size_t length, const size_t offset)
         {
-            if (!d) return false;
+            if (!d) return -1;
 
             memcpy(d + offset, data, length);
 
@@ -181,9 +208,19 @@ namespace Lunaris {
             if (offset + length == d_len) { 
                 j = new pJSON(d, d_len);
                 DEL_EM(d);
+
+                const auto j_op = (*j)["op"];
+                const auto j_s  = (*j)["s"];
+                const auto j_t  = (*j)["t"];
+
+                this->op = static_cast<gateway_opcodes>(j_op.to_int());
+                this->s  = j_s.to_uint64();
+                this->t  = str2gateway_events(j_t.to_string());
+
+                return 1;
             }
 
-            return true;
+            return 0;
         }
 
         void gateway_payload_structure::free()
@@ -196,45 +233,228 @@ namespace Lunaris {
         Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
             : m_intents(intents), m_token(token), m_event_handler(evhlr)
         {
-            ESP_LOGI(TAG, "Gateway data is working... Loading certificates...");
+            ESP_LOGI(TAG, "Initializing Gateway version %s for %s...", app_version, target_app);
+
+            ESP_LOGI(TAG, "Loading certificates...");
                         
             READFILE_FULLY_TO(m_gateway_cert_perm, cert_gateway_path, "Could not load gateway certificate.");
 
             ESP_LOGI(TAG, "Certificate file loaded:\n\n%s\n", m_gateway_cert_perm.c_str());
+            
+            esp_websocket_client_config_t ws_cfg = {
+                .uri = (const char*) gateway_url,
+                .disable_auto_reconnect = true,
+                .task_prio = gateway_self_priority,
+                .task_stack = gateway_stack_size,
+                .buffer_size = gateway_buffer_size,
+                .cert_pem = m_gateway_cert_perm.c_str()
+            };
+            
+            ESP_LOGI(TAG, "ESP Websocket client...");
 
-            ESP_LOGI(TAG, "Gateway data structure is ready.");
-        }
+            if (!(m_client_handle = esp_websocket_client_init(&ws_cfg))) {
+                throw Exception("Can't init esp websocket client");
+            }
 
-        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : data(token, intents, evhlr)
-        {
-            ESP_LOGI(TAG, "Initializing Gateway version %s for %s...", app_version, target_app);
+            if (esp_websocket_register_events(m_client_handle, WEBSOCKET_EVENT_ANY, &__c_gateway_redirect_event, (void*)this) != ESP_OK) {
 
-            //esp_websocket_client_config_t ws_cfg = {
-            //    .uri = (const char*) gateway_url,
-            //    .disable_auto_reconnect = true,
-            //    .task_prio = gateway_self_priority,
-            //    .task_stack = gateway_stack_size,
-            //    .buffer_size = gateway_buffer_size,
-            //    .cert_pem = data.m_gateway_cert_perm.c_str()
-            //};
-//
-            //if (!(data.m_client_handle = esp_websocket_client_init(&ws_cfg))) {
-//
-            //}
-
+                esp_websocket_client_destroy(m_client_handle);
+                m_client_handle = nullptr;
+            }
+            
 
             ESP_LOGI(TAG, "Initialized Gateway.");
+        }
+
+        Gateway::gateway_data::~gateway_data()
+        {
+            DEL_IT(m_pay_work);
+
+            if (m_heartbeat_task) vTaskDelete(m_heartbeat_task);
+            m_heartbeat_task = nullptr;
+        }
+
+
+        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
+            : data(new gateway_data(token, intents, evhlr))
+        {            
         }
 
         Gateway::~Gateway()
         {
             stop();
+            DEL_IT(data);
         }
         
         void Gateway::stop()
         {
 
+        }
+
+        // Send heartbeats
+        void __c_async_heartbeat(void* param)
+        {
+            Gateway::gateway_data& gw_data = *(Gateway::gateway_data*)param;
+            
+            ESP_LOGI(TAG, "[HB] Task HEARTBEAT started with %lu ms of heartbeat time.", gw_data.m_heartbeat_interval_ms);
+
+            while((gw_data.m_stats & gateway_status_binary::CONNECTED) == gateway_status_binary::CONNECTED)
+            {
+                if (!gw_data.m_heartbeat_got_confirm) {
+                    ESP_LOGI(TAG, "[HB] Task HEARTBEAT did not get ACK in time... Restart?");
+                    gw_data.m_stats += gateway_status_binary::HEARTBEAT_NO_ACK;
+                }
+
+                gw_data.m_heartbeat_got_confirm = false;
+
+                ESP_LOGI(TAG, "[HB] Task HEARTBEAT sending heartbeat...");
+
+
+                char* _allocated;
+                if (gw_data.m_last_sequence_number >= 0) {
+                    saprintf(_allocated, "{\"op\": %i, \"d\": %lli}", static_cast<int>(gateway_send_events::HEARTBEAT), gw_data.m_last_sequence_number);
+                }
+                else {
+                    saprintf(_allocated, "{\"op\": %i, \"d\": null}", static_cast<int>(gateway_send_events::HEARTBEAT));
+                }
+
+
+                // SEND HEARTBEAT THINGY
+
+                //const std::string json_to_send = 
+                //"{"
+                //    "\"op\":" + std::to_string(static_cast<int>(gateway_send_events::HEARTBEAT)) + ","
+                //    "\"d\":" + (unique_cfg.sequence_number != -1 ? std::to_string(unique_cfg.sequence_number) : "null") +
+                //"}";
+                // SEE GATEWAY_HANDLING
+
+                time_t end_time = time(nullptr) + static_cast<time_t>(gw_data.m_heartbeat_interval_ms);
+
+                ESP_LOGI(TAG, "[HB] Task HEARTBEAT idle.");
+
+                while(time(nullptr) < end_time) {
+                    if ((gw_data.m_stats & gateway_status_binary::HEARTBEAT_NEEDED) == gateway_status_binary::HEARTBEAT_NEEDED) {
+                        gw_data.m_stats -= gateway_status_binary::HEARTBEAT_NEEDED;
+                        gw_data.m_heartbeat_got_confirm = true; // assume yes
+                        break;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }                
+            }
+
+            vTaskDelete(nullptr);
+        }
+        
+        void __c_gateway_redirect_event(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
+        {
+            Gateway::gateway_data& gw_data = *(Gateway::gateway_data*)event_handler_arg;            
+            esp_websocket_event_data_t* data = (esp_websocket_event_data_t*)event_data;
+
+            switch (event_id) {
+            case WEBSOCKET_EVENT_CONNECTED:
+                ESP_LOGW(TAG, "[EV] Initialized Gateway.");
+                gw_data.m_stats += gateway_status_binary::CONNECTED;
+                gw_data.m_stats -= gateway_status_binary::CLOSED;
+                gw_data.m_stats -= gateway_status_binary::ERROR_NEED_HELP;
+
+                break;
+            case WEBSOCKET_EVENT_DATA:
+            {
+                if(data->op_code != WS_TRANSPORT_OPCODES_TEXT && data->op_code != WS_TRANSPORT_OPCODES_CLOSE) break;
+
+                if (data->payload_offset == 0) { DEL_IT(gw_data.m_pay_work); gw_data.m_pay_work = new gateway_payload_structure(data->payload_len); }
+                const int ret = gw_data.m_pay_work->append(data->data_ptr, data->data_len, data->payload_offset);
+
+                gateway_payload_structure& ps = *gw_data.m_pay_work;
+
+                // SUCCESS!
+                if (ret == 1) {
+                    if (ps.s >= 0) gw_data.m_last_sequence_number = ps.s;
+
+                    switch(ps.op) {
+                    case gateway_opcodes::DISPATCH:                 // [RECEIVE]        // An event was dispatched.
+                        switch(ps.t) { // note: hello is managed @ opcode level
+                        case gateway_events::READY:                 // Contains the initial state information
+                            gw_data.m_session_id    = (*ps.j)["d"]["session_id"].to_string();
+                            gw_data.m_bot_id        = (*ps.j)["d"]["user"]["id"].to_uint64();
+                            gw_data.m_bot_string    = (*ps.j)["d"]["user"]["username"].to_string();
+                            
+                            ESP_LOGI(TAG, "[EV] Ready, started with session=%s, id=%llu, username=%s.", gw_data.m_session_id.c_str(), gw_data.m_bot_id, gw_data.m_bot_string.c_str());
+
+                            break;
+                        case gateway_events::RESUMED:
+
+                            break;
+                        /*case gateway_events::RECONNECT:
+
+                            break;
+                        case gateway_events::INVALID_SESSION:
+
+                            break;*/
+                        default:
+                            break;
+                        }
+                        break;
+                    case gateway_opcodes::HEARTBEAT:                // [SEND/RECEIVE]   // Fired periodically by the client to keep the connection alive.
+                        ESP_LOGW(TAG, "[EV] OP: HEARTBEAT, Discord asked for one.");
+                        gw_data.m_stats += gateway_status_binary::HEARTBEAT_NEEDED;
+                        break;
+                    case gateway_opcodes::RECONNECT:                // [RECEIVE]        // You should attempt to reconnect and resume immediately.
+                        // NOT IMPLEMENTED
+                        TABLE_FLIP_CHIP_I_AM_DEAD();
+                        break;
+                    case gateway_opcodes::INVALID_SESSION:          // [RECEIVE]        // The session has been invalidated. You should reconnect and identify/resume accordingly.
+                        // NOT IMPLEMENTED
+                        TABLE_FLIP_CHIP_I_AM_DEAD();
+                        break;
+                    case gateway_opcodes::HELLO:                    // [RECEIVE]        // Sent immediately after connecting, contains the heartbeat_interval to use.
+                        ESP_LOGI(TAG, "[EV] OP: HELLO, working on it...");
+                        {
+                            gw_data.m_heartbeat_interval_ms = static_cast<int32_t>((*ps.j)["d"]["heartbeat_interval"].to_int());
+                            if (gw_data.m_heartbeat_interval_ms < 100) {
+                                ESP_LOGE(TAG, "[EV] PANIC: FATAL ERROR ON HEARTBEAT_INTERVAL_MS AT HELLO EVENT, TIME IS BROKEN (< 100 ms). RESTARTING SELF. DROPPING OFF!");
+                                TABLE_FLIP_CHIP_I_AM_DEAD();
+                            }
+
+                            gw_data.m_heartbeat_got_confirm = true;
+                            if (gw_data.m_heartbeat_task) vTaskDelete(gw_data.m_heartbeat_task);
+
+                            xTaskCreate(__c_async_heartbeat, "HEARTBEAT", 2048, event_handler_arg, gateway_heartbeat_task_priority, &gw_data.m_heartbeat_task);
+                            if (gw_data.m_heartbeat_task == nullptr) {
+                                ESP_LOGE(TAG, "[EV] PANIC: FATAL ERROR ON XTASKCREATE AT HELLO EVENT, CANNOT CREATE ESSENTIAL TASK FOR LIFE. RESTARTING SELF. DROPPING OFF!");
+                                TABLE_FLIP_CHIP_I_AM_DEAD();
+                            }
+                        }
+                        break;
+                    case gateway_opcodes::HEARTBEAT_ACK:            // [RECEIVE]        // Sent in response to receiving a heartbeat to acknowledge that it has been received.
+                        ESP_LOGI(TAG, "[EV] OP: HEARTBEAT ACK, good.");
+                        gw_data.m_heartbeat_got_confirm = true;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+                break;
+            case WEBSOCKET_EVENT_ERROR:
+                ESP_LOGE(TAG, "[EV] Error on gateway.");
+                gw_data.m_stats += gateway_status_binary::ERROR_NEED_HELP;
+
+                break;
+            case WEBSOCKET_EVENT_DISCONNECTED:            
+                ESP_LOGW(TAG, "[EV] Gateway disconnected.");
+                gw_data.m_stats -= gateway_status_binary::CONNECTED;
+
+                break;
+            case WEBSOCKET_EVENT_CLOSED:
+                ESP_LOGW(TAG, "[EV] Gateway closed cleanly.");
+                gw_data.m_stats += gateway_status_binary::CLOSED;
+
+                break;
+            default:
+                ESP_LOGW(TAG, "[EV] Gateway got UNKNOWN EVENT ID. Not handling it.");
+                break;
+            }
         }
 
     }

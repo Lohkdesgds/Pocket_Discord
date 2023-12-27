@@ -142,7 +142,7 @@ void EventHandlerDefault::destroy_global()
 
 event_result EventHandlerDefault::post(FunctionWrapper fcn, const unsigned to)
 {
-    if (!has_registered_global) return event_result::ERROR;
+    if (!has_registered_global) start_global();
 
     uintptr_t mov = (uintptr_t)new FunctionWrapper((FunctionWrapper&&)(fcn));
     

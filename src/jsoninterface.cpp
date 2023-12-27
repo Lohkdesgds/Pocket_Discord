@@ -49,11 +49,6 @@ bool pJSON::is_number() const
     return m_json ? cJSON_IsNumber(m_json) : false;
 }
 
-bool pJSON::is_number_big() const
-{
-    return m_json ? (cJSON_IsNumber(m_json) ? (m_json->valueint == INT_MAX || m_json->valueint == INT_MIN) : false) : false;
-}
-
 bool pJSON::is_string() const
 {
     return m_json ? (cJSON_IsString(m_json) && m_json->valuestring != nullptr) : false;
@@ -74,72 +69,62 @@ bool pJSON::is_raw() const
     return m_json ? cJSON_IsRaw(m_json) : false;
 }
 
-bool pJSON::get_bool() const
+bool pJSON::is_root() const
 {
-    return m_json ? m_json->type == cJSON_True : false;
-}
-
-double pJSON::get_double() const
-{
-    return m_json ? m_json->valuedouble : 0.0;
-}
-
-int pJSON::get_int() const
-{
-    return m_json ? m_json->valueint : 0;
+    return m_delete && m_json;
 }
 
 bool pJSON::has_object(const char* name) const
 {
-    return get_object(name).m_json != nullptr;
+    return to_object(name).m_json != nullptr;
 }
 
 bool pJSON::has_object_insensitive(const char* name) const
 {
-    return get_object_insensitive(name).m_json != nullptr;
+    return to_object_insensitive(name).m_json != nullptr;
 }
 
-pJSON pJSON::get_object(const char* name) const
+bool pJSON::to_bool() const
+{
+    return m_json ? m_json->type == cJSON_True : false;
+}
+
+double pJSON::to_double() const
+{
+    return m_json ? m_json->valuedouble : 0.0;
+}
+
+int64_t pJSON::to_int() const
+{
+    return m_json ? m_json->valueint : 0;
+}
+
+uint64_t pJSON::to_uint64() const
+{
+    return m_json ? m_json->valueuint : 0;
+}
+
+pJSON pJSON::to_object(const char* name) const
 {
     return pJSON(m_json ? cJSON_GetObjectItemCaseSensitive(m_json, name) : nullptr);
 }
 
-pJSON pJSON::get_object_insensitive(const char* name) const
+pJSON pJSON::to_object_insensitive(const char* name) const
 {
     return pJSON(m_json ? cJSON_GetObjectItem(m_json, name) : nullptr);
 }
 
-const char* pJSON::get_raw() const
+const char* pJSON::to_raw() const
 {
     return m_json ? m_json->valuestring : nullptr;
 }
 
-const char* pJSON::get_string() const
+const char* pJSON::to_string() const
 {
     return m_json ? m_json->valuestring : nullptr;
 }
 
 pJSON pJSON::operator[](const char* s)
 {
-    return get_object(s);
-}
-
-pJSON::operator bool() const
-{
-    return is_bool() ? get_bool() : false;
-}
-
-pJSON::operator double() const
-{
-    return is_number() ? get_double() : 0.0;
-}
-
-pJSON::operator int() const
-{
-    return is_number() ? get_int() : 0;
-}
-
-pJSON::operator const char*() const
-{
-    return (is_string() || is_raw()) ? get_string() : nullptr;
+    return to_object(s);
 }

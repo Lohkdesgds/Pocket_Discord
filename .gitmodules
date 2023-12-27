@@ -1,0 +1,3 @@
+[submodule "deps/cJSONL"]
+	path = deps/cJSONL
+	url = https://github.com/LunarisLib/cJSON
