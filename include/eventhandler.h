@@ -28,7 +28,7 @@ public:
     void operator=(EventHandler&&) noexcept;
 
     // Event loop name, queue size, stack size, queue priority
-    EventHandler(const char*, const size_t = 3, const size_t = 4096, const unsigned = 4);
+    EventHandler(const char*, const size_t = 3, const size_t = 4096, const unsigned = 4, const BaseType_t = tskNO_AFFINITY);
 
     ~EventHandler();
 

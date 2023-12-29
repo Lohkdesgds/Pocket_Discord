@@ -89,12 +89,11 @@ namespace Lunaris {
             static volatile sc_wifi*  m_wifi;
             static volatile sc_ntp*   m_ntp;
             static volatile size_t    m_BotBases;
-            static File*              m_debugfile;
         public:
             BotBase();
             ~BotBase();
 
-            static BotBase::BotSelf make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler, const bool debug = false);
+            static BotBase::BotSelf make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler);
 
             void destroy();
 

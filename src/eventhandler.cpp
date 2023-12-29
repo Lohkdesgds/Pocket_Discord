@@ -60,7 +60,7 @@ void EventHandler::operator=(EventHandler&& e) noexcept
     e.m_id = 0;
 }
 
-EventHandler::EventHandler(const char* task_name, const size_t queue_size, const size_t stack_size, const unsigned priority)
+EventHandler::EventHandler(const char* task_name, const size_t queue_size, const size_t stack_size, const unsigned priority, const BaseType_t core_id)
     : m_queue_size(new volatile unsigned(0)), m_id(++m_static_id)
 {
     esp_event_loop_args_t event_loop_args = {
@@ -68,7 +68,7 @@ EventHandler::EventHandler(const char* task_name, const size_t queue_size, const
         .task_name = task_name,
         .task_priority = static_cast<UBaseType_t>(priority),
         .task_stack_size = stack_size,
-        .task_core_id = tskNO_AFFINITY
+        .task_core_id = core_id
     };
 
     if (esp_event_loop_create(&event_loop_args, &m_handle) != ESP_OK) {

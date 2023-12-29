@@ -215,13 +215,20 @@ namespace Lunaris {
         gateway_status_binary operator-(const gateway_status_binary&, const gateway_status_binary&);
         gateway_status_binary operator&(const gateway_status_binary&, const gateway_status_binary&);
 
+        // as JSON need memory ref, this will keep them both allocated until destroyed.
+        // constructor generates JSON automatically and destroys them at delete
+        struct gateway_event_memory_block;
+
         struct gateway_payload_structure {
             char* d = nullptr;          // payload
             const size_t d_len = 0;     // total payload length
-            gateway_opcodes op;         // j["op"]
-            int64_t s = -1;             // j["s"]
-            gateway_events t;           // j["t"]
-            JSON* j = nullptr;          // json, parsed when append() is completed. format: { op: opcode_int, d: {...}, s: sequence_number_int, t: event_name_string }
+            //gateway_opcodes op;         // j["op"]
+            //int64_t s = -1;             // j["s"]
+            //gateway_events t;           // j["t"]
+
+            gateway_event_memory_block* last_event_block = nullptr;
+            //JSON* j = nullptr;          // json, parsed when append() is completed. format: { op: opcode_int, d: {...}, s: sequence_number_int, t: event_name_string }
+
 
             gateway_payload_structure(const gateway_payload_structure&) = delete;
             gateway_payload_structure(gateway_payload_structure&&) = delete;
@@ -232,8 +239,8 @@ namespace Lunaris {
             gateway_payload_structure(const size_t);
             ~gateway_payload_structure();
 
-            // append <data> with <length> size at <offset> (optional file debug at end). Automatic parse if (offset + length == this->d_len). return 1 on end, 0 on non error or -1 if memory is null
-            int append(const char*, size_t, size_t, File* = nullptr);
+            // append <data> with <length> size at <offset>. Automatic parse if (offset + length == this->d_len). return 1 on end, 0 on non error or -1 if memory is null
+            int append(const char*, size_t, size_t);
             // free all memory
             void free();
         };
@@ -264,11 +271,10 @@ namespace Lunaris {
                 // === // WORKING DATA // ==================================================================
                 esp_websocket_client_handle_t m_client_handle = nullptr;        // SETUP DONE (partially)
                 gateway_payload_structure* m_pay_work = nullptr;                // BEING USED
-                EventHandlerDefault m_event_loop;                               // NOT USED YET
+                EventHandler m_event_loop;                                      // NOT USED YET
                 gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
                 uint64_t m_client_last_send = 0;
                 TaskHandle_t m_gateway_send_task = nullptr;
-                File* m_debug_write_fp = nullptr;
                 //gateway_status m_status = gateway_status::UNKNOWN;
 
                 bool send_raw_json(const char*, const size_t);
@@ -276,7 +282,7 @@ namespace Lunaris {
                 void summon_gateway_send_task();
                 void destroy_gateway_send_task();
 
-                gateway_data(const char*, const gateway_intents, const Gateway::event_handler, File* = nullptr);
+                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
                 ~gateway_data();
 
                 void start_gateway();
@@ -286,10 +292,23 @@ namespace Lunaris {
             gateway_data* data = nullptr;
         public:
             // token, gateway
-            Gateway(const char* token, const gateway_intents, const event_handler, File* = nullptr);
+            Gateway(const char* token, const gateway_intents, const event_handler);
             ~Gateway();
 
             void stop();
+        };
+
+        struct gateway_event_memory_block {
+            char* ref;
+            const JSON* j;
+            const JSON d;
+            gateway_events t;           // j["t"] aka ev_id
+            int64_t s = -1;             // j["s"]
+            gateway_opcodes op;         // j["op"]
+            Gateway::event_handler func;
+
+            gateway_event_memory_block(char*, const size_t);
+            ~gateway_event_memory_block();
         };
     }
 }

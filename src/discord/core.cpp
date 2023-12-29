@@ -37,7 +37,6 @@ namespace Lunaris {
         volatile BotBase::sc_wifi*  BotBase::m_wifi = nullptr;
         volatile BotBase::sc_ntp*   BotBase::m_ntp = nullptr;
         volatile size_t             BotBase::m_BotBases = 0;
-        File*                       BotBase::m_debugfile = nullptr;
 
         void eternal_flash_death(const error_codes signal = error_codes::NONE)
         {
@@ -389,10 +388,9 @@ namespace Lunaris {
             destroy();
         }
 
-        BotBase::BotSelf BotBase::make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler, const bool enable_debug)
+        BotBase::BotSelf BotBase::make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler)
         {
-            if (enable_debug && !m_debugfile) m_debugfile = new File("_debug.txt", "wb");
-            return BotBase::BotSelf(new Gateway(token, intents, function_handler, enable_debug ? m_debugfile : nullptr));
+            return BotBase::BotSelf(new Gateway(token, intents, function_handler));
         }
 
         void BotBase::destroy()
@@ -402,7 +400,6 @@ namespace Lunaris {
             if (m_sd)    { delete m_sd;    m_sd = nullptr; }
             if (m_eloop) { delete m_eloop; m_eloop = nullptr; }
             if (m_nvs)   { delete m_nvs;   m_nvs = nullptr; }
-            if (m_debugfile) { delete m_debugfile; m_debugfile = nullptr; }
             set_led(false);
         }
 
