@@ -6,10 +6,12 @@
 #include <time.h>
 #include <stdexcept>
 
-#include "jsoninterface.h"
+#include "LJSON/json.h"
 #include "defaults.h"
 #include "filehandler.h"
 #include "useful.h"
+
+#define RELEASE // remove spam
 
 namespace Lunaris {
     namespace PocketDiscord {
@@ -200,29 +202,35 @@ namespace Lunaris {
             free();
         }
 
-        int gateway_payload_structure::append(const char* data, const size_t length, const size_t offset)
+        int gateway_payload_structure::append(const char* data, const size_t length, const size_t offset, File* debug_fp)
         {
             if (!d) return -1;
 
             memcpy(d + offset, data, length);
+            if (debug_fp) debug_fp->write(data, length);
 
             // Got to end?
             if (offset + length == d_len) { 
-                j = new pJSON(d, d_len);
+                j = new JSON(d, d_len);
+
                 DEL_EM(d);
+                if (debug_fp) {
+                    debug_fp->write("\n\n", 2);
+                    debug_fp->flush();
+                }
 
                 const auto j_op = (*j)["op"];
                 const auto j_s  = (*j)["s"];
                 const auto j_t  = (*j)["t"];
 
-                if (j_op.is_number())   this->op = static_cast<gateway_opcodes>(j_op.to_int());
-                else                    this->op = gateway_opcodes::UNKNOWN;
+                if (j_op.get_type() == JSON::type::NUMBER)   this->op = static_cast<gateway_opcodes>(j_op.get_int());
+                else                                         this->op = gateway_opcodes::UNKNOWN;
 
-                if (j_s.is_number())    this->s  = j_s.to_uint64();
-                else                    this->s  = -1;
+                if (j_s.get_type() == JSON::type::NUMBER)    this->s = j_s.get_uint();
+                else                                         this->s = -1;
 
-                if (j_t.is_string())    this->t  = str2gateway_events(j_t.to_string());
-                else                    this->t = gateway_events::UNKNOWN;
+                if (j_t.get_type() == JSON::type::STRING)    this->t = str2gateway_events(j_t);
+                else                                         this->t = gateway_events::UNKNOWN;
 
                 return 1;
             }
@@ -286,8 +294,8 @@ namespace Lunaris {
             }
         }
 
-        Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : m_intents(intents), m_token(token), m_event_handler(evhlr)
+        Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr, File* dbgfp)
+            : m_intents(intents), m_token(token), m_event_handler(evhlr), m_debug_write_fp(dbgfp)
         {
             ESP_LOGI(TAG, "Initializing Gateway for the first time, version %s for %s...", app_version, target_app);
             ESP_LOGI(TAG, "TOKEN: %s", m_token.c_str());
@@ -380,8 +388,8 @@ namespace Lunaris {
         
 
 
-        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : data(new gateway_data(token, intents, evhlr))
+        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr, File* debg_fp)
+            : data(new gateway_data(token, intents, evhlr, debg_fp))
         {            
         }
 
@@ -549,7 +557,7 @@ namespace Lunaris {
         // workaround for single void* to Gateway func
         struct ___event_data {
             gateway_events ev_id;
-            pJSON moved;
+            JSON moved;
             Gateway::event_handler func;
         };
         void ___del_event_data(void* p) {delete (___event_data*)p; }
@@ -603,7 +611,7 @@ namespace Lunaris {
                     if(data->op_code != WS_TRANSPORT_OPCODES_TEXT && data->op_code != WS_TRANSPORT_OPCODES_CLOSE) break;
 
                     if (data->payload_offset == 0) { DEL_IT(gw_data.m_pay_work); gw_data.m_pay_work = new gateway_payload_structure(data->payload_len); }
-                    const int ret = gw_data.m_pay_work->append(data->data_ptr, data->data_len, data->payload_offset);
+                    const int ret = gw_data.m_pay_work->append(data->data_ptr, data->data_len, data->payload_offset, gw_data.m_debug_write_fp);
 
                     gateway_payload_structure& ps = *gw_data.m_pay_work;
 
@@ -618,9 +626,9 @@ namespace Lunaris {
 
                                 ESP_LOGI(TAG, "[EV] Retrieving user session and id...");
 
-                                gw_data.m_session_id    = (*ps.j)["d"]["session_id"].to_string();
-                                gw_data.m_bot_id        = (*ps.j)["d"]["user"]["id"].to_uint64();
-                                gw_data.m_bot_string    = (*ps.j)["d"]["user"]["username"].to_string();
+                                gw_data.m_session_id    = (*ps.j)["d"]["session_id"].get_string();
+                                gw_data.m_bot_id        = (*ps.j)["d"]["user"]["id"].get_uint();
+                                gw_data.m_bot_string    = (*ps.j)["d"]["user"]["username"].get_string();
                                 
                                 ESP_LOGI(TAG, "[EV] Ready, started with session=%s, id=%llu, username=%s.", gw_data.m_session_id.c_str(), gw_data.m_bot_id, gw_data.m_bot_string.c_str());
 
@@ -651,7 +659,7 @@ namespace Lunaris {
                             }
 
                             if (gw_data.m_event_handler) {
-                                ___event_data* evd = new ___event_data {ps.t, (pJSON&&)(*ps.j), gw_data.m_event_handler };
+                                ___event_data* evd = new ___event_data {ps.t, (JSON&&)(*ps.j), gw_data.m_event_handler };
                                 gw_data.m_event_loop.post(FunctionWrapper(__c_event_handler_intermedium, evd, ___del_event_data));
                             }
                             break;
@@ -679,7 +687,7 @@ namespace Lunaris {
                         case gateway_opcodes::HELLO:                    // [RECEIVE]        // Sent immediately after connecting, contains the heartbeat_interval to use.
                             ESP_LOGI(TAG, "[EV] OP: HELLO, working on it...");
                             {
-                                gw_data.m_heartbeat_interval_ms = static_cast<int32_t>((*ps.j)["d"]["heartbeat_interval"].to_int());
+                                gw_data.m_heartbeat_interval_ms = static_cast<int32_t>((*ps.j)["d"]["heartbeat_interval"].get_int());
                                 if (gw_data.m_heartbeat_interval_ms < 100) {
                                     ESP_LOGE(TAG, "[EV] PANIC: FATAL ERROR ON HEARTBEAT_INTERVAL_MS AT HELLO EVENT, TIME IS BROKEN (< 100 ms). RESTARTING SELF. DROPPING OFF!");
                                     TABLE_FLIP_CHIP_I_AM_DEAD();

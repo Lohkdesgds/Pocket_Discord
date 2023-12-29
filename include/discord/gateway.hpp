@@ -8,8 +8,9 @@
 #include "esp_transport_ws.h"
 
 #include "../eventhandler.h"
+#include "../filehandler.h"
 #include "heapstring.h"
-#include "jsoninterface.h"
+#include "LJSON/json.h"
 
 
 namespace Lunaris {
@@ -220,7 +221,7 @@ namespace Lunaris {
             gateway_opcodes op;         // j["op"]
             int64_t s = -1;             // j["s"]
             gateway_events t;           // j["t"]
-            pJSON* j = nullptr;         // json, parsed when append() is completed. format: { op: opcode_int, d: {...}, s: sequence_number_int, t: event_name_string }
+            JSON* j = nullptr;          // json, parsed when append() is completed. format: { op: opcode_int, d: {...}, s: sequence_number_int, t: event_name_string }
 
             gateway_payload_structure(const gateway_payload_structure&) = delete;
             gateway_payload_structure(gateway_payload_structure&&) = delete;
@@ -231,8 +232,8 @@ namespace Lunaris {
             gateway_payload_structure(const size_t);
             ~gateway_payload_structure();
 
-            // append <data> with <length> size at <offset>. Automatic parse if (offset + length == this->d_len). return 1 on end, 0 on non error or -1 if memory is null
-            int append(const char*, size_t, size_t);
+            // append <data> with <length> size at <offset> (optional file debug at end). Automatic parse if (offset + length == this->d_len). return 1 on end, 0 on non error or -1 if memory is null
+            int append(const char*, size_t, size_t, File* = nullptr);
             // free all memory
             void free();
         };
@@ -241,7 +242,7 @@ namespace Lunaris {
 
         class Gateway {
         public:
-	        typedef void(*event_handler)(const gateway_events&, const pJSON&);
+	        typedef void(*event_handler)(const gateway_events&, const JSON&);
 
             struct gateway_data {
                 // === // USER SET DATA // ==================================================================
@@ -267,6 +268,7 @@ namespace Lunaris {
                 gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
                 uint64_t m_client_last_send = 0;
                 TaskHandle_t m_gateway_send_task = nullptr;
+                File* m_debug_write_fp = nullptr;
                 //gateway_status m_status = gateway_status::UNKNOWN;
 
                 bool send_raw_json(const char*, const size_t);
@@ -274,7 +276,7 @@ namespace Lunaris {
                 void summon_gateway_send_task();
                 void destroy_gateway_send_task();
 
-                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
+                gateway_data(const char*, const gateway_intents, const Gateway::event_handler, File* = nullptr);
                 ~gateway_data();
 
                 void start_gateway();
@@ -284,7 +286,7 @@ namespace Lunaris {
             gateway_data* data = nullptr;
         public:
             // token, gateway
-            Gateway(const char* token, const gateway_intents, const event_handler);
+            Gateway(const char* token, const gateway_intents, const event_handler, File* = nullptr);
             ~Gateway();
 
             void stop();

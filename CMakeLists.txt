@@ -25,14 +25,12 @@ idf_component_register(
     SRCS 
         src/useful.cpp
         src/ledhandler.cpp
-        src/jsoninterface.cpp
         src/eventhandler.cpp
         src/heapstring.cpp
         src/filehandler.cpp
         src/functionwrapper.cpp
         src/discord/gateway.cpp
         src/discord/core.cpp
-        deps/cJSONL/cJSON.c
     INCLUDE_DIRS include deps
     REQUIRES esp_wifi esp_websocket_client esp_http_client lwip esp_netif
     PRIV_REQUIRES app_update nvs_flash fatfs
