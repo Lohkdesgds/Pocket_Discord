@@ -1,0 +1,3 @@
+[submodule "deps/LJSON"]
+	path = deps/LJSON
+	url = https://github.com/Lohkdesgds/Lunaris-JSON

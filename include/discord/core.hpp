@@ -1,9 +1,15 @@
 #pragma once
 
-#include "heapstring.h"
-#include "filehandler.h"
-#include "functionwrapper.h"
-#include "ledhandler.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+
+#include "../heapstring.h"
+#include "../filehandler.h"
+#include "../functionwrapper.h"
+#include "../ledhandler.h"
+#include "../eventhandler.h"
+
+#include "discord/gateway.hpp"
 
 namespace Lunaris {
     namespace PocketDiscord {
@@ -17,11 +23,82 @@ namespace Lunaris {
             SDCARD_CONFIG_FILE_NON_EXISTENT,
             WIFI_NTP_FAILED
         };
-        
-        class Bot {
+
+        enum class wifi_status : uint8_t {
+            OFFLINE,
+            CONNECTING,
+            CONNECTED
+        };
+
+        struct ram_info {
+            nvs_stats_t nvs_stats;
+            const size_t mem_total;
+            const size_t mem_free;
+            const size_t memex_total;
+            const size_t memex_free;
+            const size_t mem32_total;
+            const size_t mem32_free;
+            const size_t memi_total;
+            const size_t memi_free;
+
+            ram_info();
+        };
+
+        class BotBase {
         public:
-            Bot();
-            ~Bot();
+        
+            class BotSelf {
+                Gateway* m_gateway;
+            public:
+                BotSelf(Gateway*);
+                ~BotSelf();
+            };
+
+        private:
+            struct sc_nvs {
+                sc_nvs();
+                ~sc_nvs();
+            };
+            struct sc_eloop {
+                EventHandlerDefault e_hlr;
+                sc_eloop();
+                ~sc_eloop();
+            };
+            struct sc_sd {
+                sdmmc_card_t *card = nullptr;
+                spi_host_device_t host_slot{};
+
+                sc_sd();
+                ~sc_sd();
+            };
+            struct sc_wifi {
+                void* m_netif_wifi_sta = nullptr;
+                wifi_status m_stat = wifi_status::OFFLINE;
+
+                sc_wifi();
+                ~sc_wifi();
+            };
+            struct sc_ntp {
+                sc_ntp();
+                ~sc_ntp();
+            };
+
+            static volatile sc_nvs*   m_nvs;
+            static volatile sc_eloop* m_eloop;
+            static volatile sc_sd*    m_sd;
+            static volatile sc_wifi*  m_wifi;
+            static volatile sc_ntp*   m_ntp;
+            static volatile size_t    m_BotBases;
+        public:
+            BotBase();
+            ~BotBase();
+
+            static BotBase::BotSelf make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler);
+
+            void destroy();
+
+            static uint32_t get_cpu_clock();
+            static ram_info get_ram_info();
         };
     }
 }

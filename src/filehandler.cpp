@@ -1,8 +1,11 @@
+// Tested, works as of 20231219
+
 #include "filehandler.h"
 #include "defaults.h"
 
 const char mount_point[] = "/sdcard";
-const size_t alloc_size_each = 512;
+const size_t alloc_size_each = 64;
+static const char TAG[] = "FP";
 
 File::File(const char* path, const char* mode)
 {
@@ -16,9 +19,11 @@ File::File(const char* path, const char* mode)
 	memcpy(buf + sizeof(mount_point), path, size_path);
 	buf[size_needed - 1] = '\0';
 
-    ESP_LOGI("FP", "Opening %s...", buf);
-
     fp = fopen(buf, mode);
+
+    if (!fp) ESP_LOGE(TAG, "Failed to open %s!", buf);
+    else     ESP_LOGI(TAG, "Opened file %s!", buf);
+
     delete[] buf;
 }
 
@@ -30,9 +35,8 @@ File::File(File&& o) noexcept
 
 void File::operator=(File&& o) noexcept
 {
-    if (fp) fclose(fp);
-    fp = o.fp;
-    o.fp = nullptr;
+    close();
+    EXC_NULL(fp, o.fp);
 }
 
 File::~File()
