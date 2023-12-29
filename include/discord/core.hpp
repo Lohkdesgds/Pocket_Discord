@@ -100,17 +100,5 @@ namespace Lunaris {
             static uint32_t get_cpu_clock();
             static ram_info get_ram_info();
         };
-
-
-
-
-
-
-        //
-        //class BotBase {
-        //public:
-        //    BotBase();
-        //    ~BotBase();
-        //};
     }
 }

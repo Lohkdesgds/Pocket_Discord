@@ -6,7 +6,6 @@
 #include "esp_event.h"
 
 #include "functionwrapper.h"
-#include "exception.h"
 
 constexpr size_t event_handler_queue_size_default = 5;
 

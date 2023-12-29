@@ -27,7 +27,7 @@ namespace Lunaris {
         constexpr unsigned gateway_queue_size_default = 30;
         constexpr unsigned gateway_poll_event_priority = 50;
         
-        const char app_version[] = "V2.0.0 ALPHA";
+        const char app_version[] = "Lunaris V2.0.0 ALPHA";
         const char target_app[] = "ESP32";
 
         const char cert_gateway_path[] = "cert/gateway.pem";
@@ -48,7 +48,7 @@ namespace Lunaris {
             HEARTBEAT_ACK           = 11        // [RECEIVE]        // Sent in response to receiving a heartbeat to acknowledge that it has been received.
             //_MAX = HEARTBEAT_ACK                // for reference
         };
-        static gateway_opcodes str2gateway_opcode(const char*);
+        gateway_opcodes str2gateway_opcode(const char*);
 
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
         enum class gateway_close_event_codes : int16_t {
@@ -67,7 +67,7 @@ namespace Lunaris {
             INVALID_INTENTS             = 4013,	    // You sent an invalid intent for a Gateway Intent. You may have incorrectly calculated the bitwise value.
             DISALLOWED_INTENTS          = 4014	    // You sent a disallowed intent for a Gateway Intent. You may have tried to specify an intent that you have not enabled or are not approved for.
         };
-        static gateway_close_event_codes str2gateway_close_event_codes(const char*);
+        gateway_close_event_codes str2gateway_close_event_codes(const char*);
 
         // from Discord @ https://discord.com/developers/docs/topics/gateway-events#send-events
         // previously called gateway_commands
@@ -80,7 +80,7 @@ namespace Lunaris {
             UPDATE_VOICE_STATE      = static_cast<int>(gateway_opcodes::VOICE_STATE_UPDATE),        // Joins, moves, or disconnects the client from a voice channel
             UPDATE_PRESENCE         = static_cast<int>(gateway_opcodes::PRESENCE_UPDATE_SEND)       // Updates a client's presence
         };
-        static gateway_send_events str2gateway_send_events(const char*);
+        gateway_send_events str2gateway_send_events(const char*);
 
         
         // from Discord @ https://discord.com/developers/docs/topics/gateway#commands-and-events-gateway-events
@@ -155,7 +155,7 @@ namespace Lunaris {
             VOICE_SERVER_UPDATE,                        // Guild's voice server was updated
             WEBHOOKS_UPDATE                             // Guild channel webhook was created, update, or deleted
         };
-        static gateway_events str2gateway_events(const char*);
+        gateway_events str2gateway_events(const char*);
 
         // from Discord @ https://discord.com/developers/docs/topics/gateway#gateway-intents
         enum class gateway_intents : uint32_t {
@@ -181,7 +181,7 @@ namespace Lunaris {
             AUTO_MODERATION_EXECUTION       = (1 << 21)
         };
 
-        static gateway_intents operator|(const gateway_intents&, const gateway_intents&);
+        gateway_intents operator|(const gateway_intents&, const gateway_intents&);
 
         // mine, based on ESP gateway response possibilites.
         //enum class gateway_status {
@@ -196,24 +196,29 @@ namespace Lunaris {
 
         enum class gateway_status_binary : uint16_t {
             NONE                = 0,
-            CONNECTED           = (1 << 0),     // Websocket connected to server
-            CLOSED              = (1 << 1),     // Websocket closed cleanly
-            HEARTBEAT_NEEDED    = (1 << 2),     // Tell task that heatbeat was needed!
+            ANY_NEED_RESTART    = (1 << 0),     // From any source, if this is triggered, things should restart
 
-            HEARTBEAT_NO_ACK    = (1 << 3),     // No ack after so much time. Restart?
-            ERROR_NEED_HELP     = (1 << 4)      // Websocket got error. Restart connection?
+            DC_HEARTBEAT_AWAKE  = (1 << 1),     // Can start sending heartbeats
+            DC_NEED_IDENTIFY    = (1 << 2),     // Send IDENTIFY (new connection or Discord asked for reconnect)
+            DC_NEED_HEARTBEAT   = (1 << 3),     // Tell task that heatbeat was needed!
+            //DC_NEED_RECONNECT   = (1 << 3),   // Discord asked for reconnect
+            //DC_HEARTBEAT_NO_ACK = (1 << 5),   // No ack after so much time. Also causes ANY_NEED_RESTART
+
+            GW_CONNECTED        = (1 << 10),    // Websocket connected to server
+            GW_CLOSED           = (1 << 11)     // Websocket closed cleanly
+            //GW_ERROR_NEED_HELP  = (1 << 12)   // Websocket got error. Also causes ANY_NEED_RESTART
         };        
-        static gateway_status_binary operator+=(gateway_status_binary&, const gateway_status_binary&);
-        static gateway_status_binary operator-=(gateway_status_binary&, const gateway_status_binary&);
-        static gateway_status_binary operator+(const gateway_status_binary&, const gateway_status_binary&);
-        static gateway_status_binary operator-(const gateway_status_binary&, const gateway_status_binary&);
-        static gateway_status_binary operator&(const gateway_status_binary&, const gateway_status_binary&);
+        gateway_status_binary operator+=(gateway_status_binary&, const gateway_status_binary&);
+        gateway_status_binary operator-=(gateway_status_binary&, const gateway_status_binary&);
+        gateway_status_binary operator+(const gateway_status_binary&, const gateway_status_binary&);
+        gateway_status_binary operator-(const gateway_status_binary&, const gateway_status_binary&);
+        gateway_status_binary operator&(const gateway_status_binary&, const gateway_status_binary&);
 
         struct gateway_payload_structure {
             char* d = nullptr;          // payload
             const size_t d_len = 0;     // total payload length
             gateway_opcodes op;         // j["op"]
-            uint64_t s = -1;           // j["s"]
+            int64_t s = -1;             // j["s"]
             gateway_events t;           // j["t"]
             pJSON* j = nullptr;         // json, parsed when append() is completed. format: { op: opcode_int, d: {...}, s: sequence_number_int, t: event_name_string }
 
@@ -221,7 +226,6 @@ namespace Lunaris {
             gateway_payload_structure(gateway_payload_structure&&) = delete;
             void operator=(const gateway_payload_structure&) = delete;
             void operator=(gateway_payload_structure&&) = delete;
-
 
             // get payload length and allocate memory for receiving it.
             gateway_payload_structure(const size_t);
@@ -234,15 +238,16 @@ namespace Lunaris {
         };
 
 
+
         class Gateway {
         public:
 	        typedef void(*event_handler)(const gateway_events&, const pJSON&);
 
             struct gateway_data {
                 // === // USER SET DATA // ==================================================================
-                gateway_intents m_intents;
-                HeapString m_token;
-                event_handler m_event_handler;
+                gateway_intents m_intents;      // from constructor
+                HeapString m_token;             // from constructor
+                event_handler m_event_handler;  // from constructor
                 HeapString m_gateway_cert_perm;
 
                 // === // DATA OF BOT // ==================================================================
@@ -252,21 +257,28 @@ namespace Lunaris {
                 
                 // === // HEARTBEAT RELATED // ==================================================================
                 uint32_t m_heartbeat_interval_ms = 0;               // if no heartbeat ack after this, reconnect.
-                int64_t m_last_sequence_number = -1;                    // if last_sequence_number_set == false, consider this null.
+                int64_t m_last_sequence_number = -1;                // if last_sequence_number_set == false, consider this null.
                 bool m_heartbeat_got_confirm = true;                // on heartbeat sent, set false. If next heartbeat this is false, reconnect.
-                TaskHandle_t m_heartbeat_task = nullptr;
                 
                 // === // WORKING DATA // ==================================================================
                 esp_websocket_client_handle_t m_client_handle = nullptr;        // SETUP DONE (partially)
                 gateway_payload_structure* m_pay_work = nullptr;                // BEING USED
                 EventHandlerDefault m_event_loop;                               // NOT USED YET
                 gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
+                uint64_t m_client_last_send = 0;
+                TaskHandle_t m_gateway_send_task = nullptr;
                 //gateway_status m_status = gateway_status::UNKNOWN;
 
-                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
+                bool send_raw_json(const char*, const size_t);
 
-                // does not end client
+                void summon_gateway_send_task();
+                void destroy_gateway_send_task();
+
+                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
                 ~gateway_data();
+
+                void start_gateway();
+                void close_gateway();
             };
         private:
             gateway_data* data = nullptr;

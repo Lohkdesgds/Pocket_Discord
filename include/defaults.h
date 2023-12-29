@@ -23,7 +23,7 @@
 
 #define TABLE_FLIP_CHIP_I_AM_DEAD() esp_restart()
 
-#define READFILE_FULLY_TO(HEAP_OBJ, FILE_TO_READ_PATH, THROW_ERR_STR) { File fp(FILE_TO_READ_PATH, "rb"); if (!fp) throw Exception(THROW_ERR_STR); char _____minbuf[32]; while(!fp.eof()) { const size_t rd = fp.read(_____minbuf, 32); if (rd == 0) { break; } HEAP_OBJ.append(_____minbuf, rd); } fp.close(); }
+#define READFILE_FULLY_TO(HEAP_OBJ, FILE_TO_READ_PATH, THROW_ERR_STR) { File fp(FILE_TO_READ_PATH, "rb"); if (!fp) throw std::runtime_error(THROW_ERR_STR); char _____minbuf[32]; while(!fp.eof()) { const size_t rd = fp.read(_____minbuf, 32); if (rd == 0) { break; } HEAP_OBJ.append(_____minbuf, rd); } fp.close(); }
 
 // allocates with new[], should dealloc with delete[]
-#define saprintf(PPTR, FORMAT, ...) { int ____l = snprintf(nullptr, 0, FORMAT, __VA_ARGS__); PPTR = new char[____l + 1]; ____l = snprintf(PPTR, ____l + 1, FORMAT, __VA_ARGS__); if (____l < 0) { delete[] PPTR; PPTR = nullptr; }}
+#define saprintf(PPTR, SIZETPTR_LEN, FORMAT, ...) { int ____l = snprintf(nullptr, 0, FORMAT, __VA_ARGS__); PPTR = new char[____l + 1]; (*SIZETPTR_LEN) = static_cast<size_t>(____l); ____l = snprintf(PPTR, ____l + 1, FORMAT, __VA_ARGS__); if (____l < 0) { delete[] PPTR; PPTR = nullptr; (*SIZETPTR_LEN) = 0; }}

@@ -15,6 +15,7 @@ HeapString::HeapString(const char* s, size_t l)
     if (s == nullptr) return;
     if (l == 0) l = strlen(s);
     mem = alloc_intern(l);
+    memcpy(mem, s, l);
     len = l;
 }
 

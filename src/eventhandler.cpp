@@ -1,5 +1,6 @@
 #include "eventhandler.h"
 #include "esp_log.h"
+#include <stdexcept>
 
 ESP_EVENT_DEFINE_BASE(EVENT_LSW_HANDLER);
 
@@ -8,13 +9,13 @@ static const char TAG[] = "EVH";
 volatile size_t EventHandler::m_static_id = 0;
 volatile bool EventHandlerDefault::has_registered_global = false;
 
-static void __event_poll_handler(void* queue_ptr, esp_event_base_t ev_type, int32_t ev_id, void* fcn_ptr)
+void __event_poll_handler(void* queue_ptr, esp_event_base_t ev_type, int32_t ev_id, void* fcn_ptr)
 {
     volatile unsigned* vol = (volatile unsigned*)queue_ptr;
     
     FunctionWrapper* f_wrap = (FunctionWrapper*)(*(uintptr_t*)fcn_ptr);
     
-    --(*vol);
+    if (vol) --(*vol);
 
     try {
         f_wrap->run();
@@ -72,12 +73,12 @@ EventHandler::EventHandler(const char* task_name, const size_t queue_size, const
 
     if (esp_event_loop_create(&event_loop_args, &m_handle) != ESP_OK) {
         ESP_LOGE(TAG, "Can't create event loop %s with queue sized %zu.", task_name, queue_size);
-        throw Exception("Failed to create event loop");
+        throw std::runtime_error("Failed to create event loop");
     }
     
     if (esp_event_handler_register_with(m_handle, EVENT_LSW_HANDLER, ESP_EVENT_ANY_ID, &__event_poll_handler, (void*)m_queue_size) != ESP_OK) {
         ESP_LOGE(TAG, "Can't register event loop %s with queue sized %zu.", task_name, queue_size);
-        throw Exception("Failed to register event loop");
+        throw std::runtime_error("Failed to register event loop");
     }
 }
 
@@ -122,13 +123,13 @@ void EventHandlerDefault::start_global()
 {
     const auto err = esp_event_loop_create_default();
 
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) throw Exception("Cannot create default event loop"); // invalid state == already created
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) throw std::runtime_error("Cannot create default event loop"); // invalid state == already created
 
     if (!has_registered_global) {
         has_registered_global = true;
         if (esp_event_handler_register(EVENT_LSW_HANDLER, ESP_EVENT_ANY_ID, &__event_poll_handler, nullptr) != ESP_OK) {
             ESP_LOGE(TAG, "Can't register on default event loop.");
-            throw Exception("Failed to register event loop");
+            throw std::runtime_error("Failed to register event loop");
         }
     }
 }

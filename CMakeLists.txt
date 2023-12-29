@@ -23,8 +23,8 @@
 
 idf_component_register(
     SRCS 
+        src/useful.cpp
         src/ledhandler.cpp
-        src/exception.cpp
         src/jsoninterface.cpp
         src/eventhandler.cpp
         src/heapstring.cpp
