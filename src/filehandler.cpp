@@ -3,7 +3,6 @@
 #include "filehandler.h"
 #include "defaults.h"
 
-const char mount_point[] = "/sdcard";
 const size_t alloc_size_each = 64;
 static const char TAG[] = "FP";
 
