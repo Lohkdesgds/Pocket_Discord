@@ -11,6 +11,7 @@
 #include "../filehandler.h"
 #include "heapstring.h"
 #include "LJSON/json.h"
+#include "smartjsonalloc.h"
 
 
 namespace Lunaris {
@@ -19,7 +20,7 @@ namespace Lunaris {
         const char gateway_url[] = "wss://gateway.discord.gg/?v=10&encoding=json";
 
         constexpr int gateway_max_timeout = 5000;
-        constexpr size_t gateway_stack_size = 6 * 1024;         // USING
+        constexpr size_t gateway_stack_size = 12 * 1024;        // USING
         constexpr size_t gateway_poll_stack_size = 16 * 1024;
         constexpr size_t gateway_buffer_size = 4096;            // USING
 
@@ -217,8 +218,9 @@ namespace Lunaris {
         struct gateway_event_memory_block;
 
         struct gateway_payload_structure {
-            char* d = nullptr;          // payload
-            const size_t d_len = 0;     // total payload length
+            //char* d = nullptr;          // payload
+            MixedJSONRef* d_mx = nullptr; // new payload way
+            const size_t d_len = 0;       // total payload length
             //gateway_opcodes op;         // j["op"]
             //int64_t s = -1;             // j["s"]
             //gateway_events t;           // j["t"]
@@ -294,7 +296,7 @@ namespace Lunaris {
         };
 
         struct gateway_event_memory_block {
-            char* ref;
+            //char* ref;
             const JSON* j;
             const JSON d;
             gateway_events t;           // j["t"] aka ev_id
@@ -302,7 +304,7 @@ namespace Lunaris {
             gateway_opcodes op;         // j["op"]
             Gateway::event_handler func;
 
-            gateway_event_memory_block(char*, const size_t);
+            gateway_event_memory_block(MixedJSONRef*&&);
             ~gateway_event_memory_block();
         };
     }

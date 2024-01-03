@@ -24,6 +24,7 @@
 idf_component_register(
     SRCS 
         src/useful.cpp
+        src/smartjsonalloc.cpp
         src/ledhandler.cpp
         src/eventhandler.cpp
         src/heapstring.cpp

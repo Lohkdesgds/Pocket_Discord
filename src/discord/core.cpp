@@ -78,21 +78,6 @@ namespace Lunaris {
             }
         }
 
-
-        ram_info::ram_info() :
-            mem_total(heap_caps_get_total_size(MALLOC_CAP_8BIT)),
-            mem_free(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-            memex_total(heap_caps_get_total_size(MALLOC_CAP_EXEC)),
-            memex_free(heap_caps_get_free_size(MALLOC_CAP_EXEC)),
-            mem32_total(heap_caps_get_total_size(MALLOC_CAP_32BIT)),
-            mem32_free(heap_caps_get_free_size(MALLOC_CAP_32BIT)),
-            memi_total(heap_caps_get_total_size(MALLOC_CAP_IRAM_8BIT)),
-            memi_free(heap_caps_get_free_size(MALLOC_CAP_IRAM_8BIT))
-        {
-            nvs_get_stats(NULL, &nvs_stats);
-        }
-
-
         BotBase::sc_nvs::sc_nvs()
         {
             ESP_LOGI(TAG, u8"==================================================");
@@ -181,6 +166,10 @@ namespace Lunaris {
             }
             
             host_slot = static_cast<spi_host_device_t>(host.slot);
+            
+            ESP_LOGI(TAG, u8"[🔄️] Making file access available to all cores through events...");
+            
+            __file_make_event_handler_on_correct_core_id();
             
             ESP_LOGI(TAG, u8"[✅] SD CARD INIT DONE");
             ESP_LOGI(TAG, u8"==================================================");
