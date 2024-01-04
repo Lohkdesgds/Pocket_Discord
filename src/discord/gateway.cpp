@@ -3,7 +3,6 @@
 #include <unordered_map>
 #include <memory>
 #include "esp_log.h"
-#include "esp_random.h"
 #include <time.h>
 #include <stdexcept>
 #include <string_view>
@@ -196,17 +195,8 @@ namespace Lunaris {
 
 
         gateway_payload_structure::gateway_payload_structure(const size_t payload_len)
-            : d_len(payload_len)
-        {
-            const uint32_t v = esp_random() % 1000;
-            char* str;
-            size_t len;
-            saprintf(str, &len, "swap_%lu.mem", v);
-
-            d_mx = new File(str, "wb+");
-
-            delete[] str;
-        }
+            : d(new char[payload_len]), d_len(payload_len)
+        {}
 
         gateway_payload_structure::~gateway_payload_structure()
         {
@@ -215,10 +205,9 @@ namespace Lunaris {
 
         int gateway_payload_structure::append(const char* data, const size_t length, const size_t offset)
         {
-            if (!d_mx) return -1;
+            if (!d) return -1;
 
-            //memcpy(d + offset, data, length);
-            d_mx->write(data, length);
+            memcpy(d + offset, data, length);
 
             // Got to end?
             if (offset + length == d_len) { 
@@ -226,22 +215,9 @@ namespace Lunaris {
 //
 //                DEL_EM(d);
 
-                d_mx->flush();
-                d_mx->seek(0, File::seek_mode::SET);
-
-                auto* movd = new FileJSON((File*&&)d_mx);
-                //ESP_LOGI("GPSDB", "FILE DATA:");
-                //if (last_event_block) delete last_event_block; // it was not moved lmao!
-                //for(size_t p = 0; p < d_len; ++p) {
-                //    const char g = movd->get(p);
-                //    if (g == '\0') {
-                //        putchar('\\');
-                //        putchar('0');
-                //    }
-                //    else putchar(g);
-                //}
-                //ESP_LOGI("GPSDB", "PARSE");
-                last_event_block = new gateway_event_memory_block((FileJSON*&&)movd);
+                if (last_event_block) delete last_event_block; // it was not moved lmao!
+                last_event_block = new gateway_event_memory_block(d, d_len);
+                d = nullptr;
 
                 return 1;
             }
@@ -251,7 +227,7 @@ namespace Lunaris {
 
         void gateway_payload_structure::free()
         {
-            DEL_IT(d_mx);
+            DEL_EM(d);
             DEL_IT(last_event_block); // delete if not moved
         }
 
@@ -580,8 +556,6 @@ namespace Lunaris {
 
                     // SUCCESS! (end)
                     if (ret == 1 && eb) {
-                        ESP_LOGI(TAG, "[EV] VALID EV S=%i OP=%i T=%i.", (int)eb->s, (int)eb->op, (int)eb->t );
-
                         if (this->m_last_sequence_number < eb->s) this->m_last_sequence_number = eb->s;
 
                         switch(eb->op) {
@@ -630,17 +604,12 @@ namespace Lunaris {
                                 // MOVING EB (ps.last_event_block) HERE:
                                 this->m_event_loop.post(
                                     FunctionWrapper(
-                                        [](void* arg){
-                                            gateway_event_memory_block* evd = (gateway_event_memory_block*)arg;
-                                            evd->func(evd->t, *evd->j);
-                                        },
+                                        [](void* arg){gateway_event_memory_block* evd = (gateway_event_memory_block*)arg; evd->func(evd->t, *evd->j);},
                                         (void*)eb,
-                                        [](void* p){
-                                            delete (gateway_event_memory_block*)p;
-                                        }
+                                        [](void* p){ delete (gateway_event_memory_block*)p; }
                                     )
                                 );
-                                eb = ps.last_event_block = nullptr;
+                                eb =ps.last_event_block = nullptr;
                             }
                             break;
                         case gateway_opcodes::HEARTBEAT:                // [SEND/RECEIVE]   // Fired periodically by the client to keep the connection alive.
@@ -691,11 +660,6 @@ namespace Lunaris {
                             break;
                         default:
                             break;
-                        }
-
-                        if (eb) {
-                            delete eb;
-                            eb = ps.last_event_block = nullptr;
                         }
                     }
                 }
@@ -765,27 +729,26 @@ namespace Lunaris {
             ESP_LOGI(TAG, "Started gateway.");
         }
 
-        gateway_event_memory_block::gateway_event_memory_block(FileJSON*&& s)
-            : j(new JSON((FileJSON*&&)s)), d((*j)["d"])
+        gateway_event_memory_block::gateway_event_memory_block(char* s, const size_t l)
+            : ref(s), j(new JSON((const char*)s, l)), d((*j)["d"])
         {
-            //j->print([](char c) { putchar(c); });
-            s = nullptr;
-            const JSON j_op = (*j)["op"];
-            const JSON j_s  = (*j)["s"];
-            const JSON j_t  = (*j)["t"];
+                const auto j_op = (*j)["op"];
+                const auto j_s  = (*j)["s"];
+                const auto j_t  = (*j)["t"];
 
-            if (j_op.get_type() == JSON::type::NUMBER)   this->op = static_cast<gateway_opcodes>(j_op.get_int());
-            else                                         this->op = gateway_opcodes::UNKNOWN;
+                if (j_op.get_type() == JSON::type::NUMBER)   this->op = static_cast<gateway_opcodes>(j_op.get_int());
+                else                                         this->op = gateway_opcodes::UNKNOWN;
 
-            if (j_s.get_type() == JSON::type::NUMBER)    this->s = j_s.get_uint();
-            else                                         this->s = -1;
+                if (j_s.get_type() == JSON::type::NUMBER)    this->s = j_s.get_uint();
+                else                                         this->s = -1;
 
-            if (j_t.get_type() == JSON::type::STRING)    this->t = str2gateway_events(j_t);
-            else                                         this->t = gateway_events::UNKNOWN;            
+                if (j_t.get_type() == JSON::type::STRING)    this->t = str2gateway_events(j_t);
+                else                                         this->t = gateway_events::UNKNOWN;    
         }
         
         gateway_event_memory_block::~gateway_event_memory_block()
         {
+            DEL_EM(ref);
             DEL_IT(j);
         }
 
