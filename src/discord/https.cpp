@@ -10,7 +10,7 @@ namespace Lunaris {
 
         static const char TAG[] = "HTTPS";
         
-        HTTPS_request::rate_limit HTTPS_request::m_rl;
+        HTTPS::rate_limit HTTPS::m_rl;
 
         esp_http_client_method_t http_request2esp(const http_request& me)
         {
@@ -151,7 +151,7 @@ namespace Lunaris {
         }
 
         
-        void HTTPS_request::handle_https_events(esp_http_client_event_t* e)
+        void HTTPS::handle_https_events(esp_http_client_event_t* e)
         {
             switch(e->event_id) {
             case HTTP_EVENT_ERROR:
@@ -167,6 +167,7 @@ namespace Lunaris {
                 //ESP_LOGI(TAG, "HTTP_EVENT_HEADERS_SENT!");
                 break;
             case HTTP_EVENT_ON_HEADER:
+                m_finished = false;
                 //ESP_LOGW(TAG, "New header: %s -> %s", e->header_key, e->header_value);
                 if (streqci(e->header_key, "X-RateLimit-Remaining", 21)) {
                     const int i = atoi(e->header_value);
@@ -179,6 +180,7 @@ namespace Lunaris {
                 break;
             case HTTP_EVENT_ON_DATA:
                 //ESP_LOGW(TAG, "New data: %.*s [%i]", e->data_len, (char*)e->data, e->data_len);
+                m_finished = false;
                 if (!m_data) m_data = new ChunkableChar();
                 m_data->append_chunk((const char*)e->data, e->data_len);
                 break;
@@ -194,6 +196,7 @@ namespace Lunaris {
                     }
 
                     if (m_data) {
+                        if (j) delete j;
                         j = new JSON((ChunkableChar*&&)m_data);
                         m_data = nullptr;
                     }
@@ -211,97 +214,43 @@ namespace Lunaris {
             }
         }
 
-        HTTPS_request::HTTPS_request(const http_request r, const char* path, const char* data, const size_t data_len, const HeapString& m_https_cert_perm, const HeapString& m_bot_header)
+        void HTTPS::start()
         {
-            if (m_rl.got_limited) {
-                m_rl.got_limited = false;
-                const double secs = (m_rl.wait_seconds - 0.001 * (get_time_ms() - m_rl.triggered_at));
-                const uint64_t msecs = static_cast<uint64_t>(1000.0 * secs + 1);
-                ESP_LOGW(TAG, "Got rate-limited, waiting %llu ms", msecs);
-                vTaskDelay(pdMS_TO_TICKS(msecs));
-            }
+            if (m_ref) return;
+
+            ESP_LOGI(TAG, "HTTPS opening...");
 
             esp_http_client_config_t config = {
                 .url = http_url,
                 .cert_pem = m_https_cert_perm.c_str(),
                 .timeout_ms = http_max_timeout,
-                .event_handler = [](esp_http_client_event_t* t){ ((HTTPS_request*)t->user_data)->handle_https_events(t); return ESP_OK; },
+                .event_handler = [](esp_http_client_event_t* t){ ((HTTPS*)t->user_data)->handle_https_events(t); return ESP_OK; },
                 .user_data = this,
-                //.keep_alive_enable = true
+                .keep_alive_enable = true
                 //.is_async = true
             };
 
             m_ref = esp_http_client_init(&config);
-
-            {
-                char* buf = nullptr;
-                size_t buf_len = 0;
-                saprintf(buf, &buf_len, "%s%s", http_url, path);
-                
-                esp_http_client_set_url(m_ref, buf);
-                delete[] buf;
-            }
-
-            esp_http_client_set_method(m_ref, http_request2esp(r));
             
             esp_http_client_set_header(m_ref, "User-Agent", http_user_agent);
             // these are for Discord thingy:
             esp_http_client_set_header(m_ref, "Authorization", m_bot_header.c_str());
             esp_http_client_set_header(m_ref, "Content-Type", "application/json");
-
-            if (data && data_len > 0) esp_http_client_set_post_field(m_ref, data, data_len);
-
-            esp_err_t err = ESP_OK;
-            while (1) {
-                err = esp_http_client_perform(m_ref);
-                if (err != ESP_ERR_HTTP_EAGAIN) {
-                    break;
-                }
-            }
-
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Error perform http request %s", esp_err_to_name(err));
-                esp_http_client_cleanup(m_ref);
-                m_ref= nullptr;
-                return;
-            }
-
-            m_status = esp_http_client_get_status_code(m_ref);
-            ESP_LOGI(TAG, "Performed HTTP %s @ %s; Got status=%i.", http_request2str(r), path, m_status);
+            
+            ESP_LOGI(TAG, "HTTPS opened!");
         }
-
-        HTTPS_request::HTTPS_request(HTTPS_request&& o) noexcept
+        
+        void HTTPS::stop()
         {
-            EXCHANGE(m_ref, o.m_ref, nullptr);
-            EXCHANGE(m_data, o.m_data, nullptr);
-            EXCHANGE(m_data_write_off, o.m_data_write_off, 0);
-            EXCHANGE(j, o.j, nullptr);
-            EXCHANGE(m_curr_rl, o.m_curr_rl, {});
-            EXCHANGE(m_status, o.m_status, -1);
-            EXCHANGE(m_was_prepared, o.m_was_prepared, false);
-            EXCHANGE(m_finished, o.m_finished, false);
-        }
+            if (!m_ref) return;
+            
+            ESP_LOGI(TAG, "HTTPS closing...");
 
-        HTTPS_request::~HTTPS_request()
-        {
-            if (m_ref) esp_http_client_cleanup(m_ref);
-            DEL_IT(j);
-            DEL_EM(m_data);
-        }
-
-        const JSON* HTTPS_request::json() const
-        {
-            return j;
-        }
-
-        bool HTTPS_request::has_finished() const
-        {
-            return m_finished;
-        }        
-
-        int HTTPS_request::get_status() const
-        {
-            return m_status;
+            esp_http_client_close(m_ref);
+            esp_http_client_cleanup(m_ref);
+            m_ref = nullptr;
+            
+            ESP_LOGI(TAG, "HTTPS closed!");
         }
         
         HTTPS::HTTPS(const char* token)
@@ -319,16 +268,98 @@ namespace Lunaris {
             m_bot_header = "Bot ";
             m_bot_header.append(m_token.c_str(), m_token.size());
             
+            ESP_LOGI(TAG, "Creating and configuring...");
+
+            start();
+            
             ESP_LOGI(TAG, "HTTPS ready.");
         }
-        
-        // following https://github.com/espressif/esp-idf/blob/ece73357caa6c766770136b82639964870e340ba/examples/protocols/esp_http_client/main/esp_http_client_example.c#L623 this time
-        HTTPS_request HTTPS::post(const http_request r, const char* path, const char* data, const size_t data_len)
+
+        HTTPS::HTTPS(HTTPS&& o) noexcept
         {
-            return HTTPS_request(r, path, data, data_len, m_https_cert_perm, m_bot_header);
+            EXCHANGE(m_ref, o.m_ref, nullptr);
+            EXCHANGE(m_data, o.m_data, nullptr);
+            EXCHANGE(m_data_write_off, o.m_data_write_off, 0);
+            EXCHANGE(j, o.j, nullptr);
+            EXCHANGE(m_curr_rl, o.m_curr_rl, {});
+            EXCHANGE(m_status, o.m_status, -1);
+            EXCHANGE(m_was_prepared, o.m_was_prepared, false);
+            EXCHANGE(m_finished, o.m_finished, false);
+            m_token = (HeapString&&)o.m_token;
+            m_https_cert_perm = (HeapString&&)o.m_https_cert_perm;
+            m_bot_header = (HeapString&&)o.m_bot_header;
+        }
+
+        HTTPS::~HTTPS()
+        {
+            stop();
+            DEL_IT(j);
+            DEL_EM(m_data);
         }
         
+        JSON HTTPS::request(const http_request r, const char* path, const char* data, const size_t data_len)
+        {
+            //static JSON empty_json = JSON("{}");
 
+            if (!m_ref) start();
+            
+            if (m_rl.got_limited) {
+                m_rl.got_limited = false;
+                const double secs = (m_rl.wait_seconds - 0.001 * (get_time_ms() - m_rl.triggered_at));
+                if (secs > 0.0) {
+                    const uint64_t msecs = static_cast<uint64_t>(1000.0 * secs + 1);
+                    ESP_LOGW(TAG, "Got rate-limited, waiting %llu ms", msecs);
+                    vTaskDelay(pdMS_TO_TICKS(msecs));
+                }
+            }
+
+            esp_http_client_set_method(m_ref, http_request2esp(r));
+
+            {
+                char* buf = nullptr;
+                size_t buf_len = 0;
+                saprintf(buf, &buf_len, "%s%s", http_url, path);
+                
+                esp_http_client_set_url(m_ref, buf);
+                delete[] buf;
+            }
+
+            if (data && data_len > 0) esp_http_client_set_post_field(m_ref, data, data_len);
+
+            esp_err_t err = ESP_OK;
+            while (1) {
+                err = esp_http_client_perform(m_ref);
+                if (err != ESP_ERR_HTTP_EAGAIN) {
+                    break;
+                }
+            }
+
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Error perform http request %s", esp_err_to_name(err));
+                stop();
+                return JSON("{}");
+            }
+
+            m_status = esp_http_client_get_status_code(m_ref);
+            ESP_LOGI(TAG, "Performed HTTP %s @ %s; Got status=%i.", http_request2str(r), path, m_status);
+
+            return j ? (JSON&&)*j : JSON("{}");
+        }
+
+        //const JSON* HTTPS::json() const
+        //{
+        //    return j;
+        //}
+
+        bool HTTPS::has_finished() const
+        {
+            return m_finished;
+        }        
+
+        int HTTPS::get_status() const
+        {
+            return m_status;
+        }
 
     }
 }

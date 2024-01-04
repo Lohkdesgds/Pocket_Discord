@@ -55,13 +55,17 @@ namespace Lunaris {
             size_t max_off() const;
         };
 
-        class HTTPS_request{
+        class HTTPS{
 
             struct rate_limit {
                 uint64_t triggered_at = 0; // ms, use get_time_ms()
                 double wait_seconds = 0;
                 bool got_limited = false;
             };
+            
+            HeapString m_token;             // from constructor
+            HeapString m_https_cert_perm;
+            HeapString m_bot_header;
 
             esp_http_client_handle_t m_ref = nullptr;
             ChunkableChar* m_data = nullptr;
@@ -75,30 +79,25 @@ namespace Lunaris {
             static rate_limit m_rl;
             
             void handle_https_events(esp_http_client_event_t*);
+
+            void start();
+            void stop();
         public:
-            HTTPS_request(const HTTPS_request&) = delete;
-            void operator=(const HTTPS_request&) = delete;
-            void operator=(HTTPS_request&&) = delete;
+            HTTPS(const HTTPS&) = delete;
+            void operator=(const HTTPS&) = delete;
+            void operator=(HTTPS&&) = delete;
             
             // req, path, data, len, cert, bot_header
-            HTTPS_request(const http_request, const char*, const char*, const size_t, const HeapString&, const HeapString&);            
-            HTTPS_request(HTTPS_request&&) noexcept;
-            ~HTTPS_request();
-
-            const JSON* json() const;
-            bool has_finished() const;
-            int get_status() const;
-        };
-
-        class HTTPS {
-            //esp_http_client_handle_t m_client = nullptr;
-            HeapString m_token;             // from constructor
-            HeapString m_https_cert_perm;
-            HeapString m_bot_header;
-        public:
             HTTPS(const char* token);
 
-            HTTPS_request post(const http_request, const char* path, const char* data = nullptr, const size_t data_len = 0);
+            HTTPS(HTTPS&&) noexcept;
+            ~HTTPS();
+
+            JSON request(const http_request, const char*, const char* = nullptr, const size_t = 0);
+
+            //const JSON* json() const;
+            bool has_finished() const;
+            int get_status() const;
         };
 
     }

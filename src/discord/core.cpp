@@ -346,6 +346,7 @@ namespace Lunaris {
         BotBase::BotSelf::~BotSelf()
         {
             DEL_IT(m_gateway);
+            DEL_IT(m_https);
         }
 
         Gateway* BotBase::BotSelf::gateway() const
