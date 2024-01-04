@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <memory>
 #include "esp_log.h"
+#include "esp_random.h"
 #include <time.h>
 #include <stdexcept>
 #include <string_view>
@@ -195,8 +196,17 @@ namespace Lunaris {
 
 
         gateway_payload_structure::gateway_payload_structure(const size_t payload_len)
-            : d_mx(new MixedJSONRef(payload_len)), d_len(payload_len)
-        {}
+            : d_len(payload_len)
+        {
+            const uint32_t v = esp_random() % 1000;
+            char* str;
+            size_t len;
+            saprintf(str, &len, "swap_%lu.mem", v);
+
+            d_mx = new File(str, "wb+");
+
+            delete[] str;
+        }
 
         gateway_payload_structure::~gateway_payload_structure()
         {
@@ -208,7 +218,7 @@ namespace Lunaris {
             if (!d_mx) return -1;
 
             //memcpy(d + offset, data, length);
-            d_mx->write(data, length, offset);
+            d_mx->write(data, length);
 
             // Got to end?
             if (offset + length == d_len) { 
@@ -216,18 +226,22 @@ namespace Lunaris {
 //
 //                DEL_EM(d);
 
-                ESP_LOGI("GPSDB", "FILE DATA:");
-                if (last_event_block) delete last_event_block; // it was not moved lmao!
-                for(size_t p = 0; p < d_mx->max_off(); ++p) {
-                    const char g = d_mx->get(p);
-                    if (g == '\0') {
-                        putchar('\\');
-                        putchar('0');
-                    }
-                    putchar(g);
-                }
-                ESP_LOGI("GPSDB", "PARSE");
-                last_event_block = new gateway_event_memory_block((MixedJSONRef*&&)d_mx);
+                d_mx->flush();
+                d_mx->seek(0, File::seek_mode::SET);
+
+                auto* movd = new FileJSON((File*&&)d_mx);
+                //ESP_LOGI("GPSDB", "FILE DATA:");
+                //if (last_event_block) delete last_event_block; // it was not moved lmao!
+                //for(size_t p = 0; p < d_len; ++p) {
+                //    const char g = movd->get(p);
+                //    if (g == '\0') {
+                //        putchar('\\');
+                //        putchar('0');
+                //    }
+                //    else putchar(g);
+                //}
+                //ESP_LOGI("GPSDB", "PARSE");
+                last_event_block = new gateway_event_memory_block((FileJSON*&&)movd);
 
                 return 1;
             }
@@ -751,11 +765,10 @@ namespace Lunaris {
             ESP_LOGI(TAG, "Started gateway.");
         }
 
-        gateway_event_memory_block::gateway_event_memory_block(MixedJSONRef*&& s)
-            : j(new JSON((MixedJSONRef*&&)s)), d((*j)["d"])
+        gateway_event_memory_block::gateway_event_memory_block(FileJSON*&& s)
+            : j(new JSON((FileJSON*&&)s)), d((*j)["d"])
         {
-            j->print([](char c) { putchar(c); });
-
+            //j->print([](char c) { putchar(c); });
             s = nullptr;
             const JSON j_op = (*j)["op"];
             const JSON j_s  = (*j)["s"];

@@ -1,5 +1,38 @@
 #include "smartjsonalloc.h"
 
+FileJSON::FileJSON(File*&& fp)
+    : Lunaris::IterateableJSONRef(), m_fp(fp), m_calcd_len(fp->size())
+{
+    fp = nullptr;
+}
+
+FileJSON::~FileJSON()
+{
+    delete m_fp;
+}
+
+char FileJSON::get(const size_t at) const
+{
+    if (at >= m_calcd_len) return '\0';
+    m_fp->seek(at, File::seek_mode::SET);
+    int v = m_fp->getc();
+    return v < 0 ? '\0' : static_cast<char>(v);
+}
+
+void FileJSON::read(char* ptr, const size_t len, const size_t at) const
+{
+    memset(ptr, '\0', len);
+    if (at >= m_calcd_len) return;
+    m_fp->seek(static_cast<long>(at), File::seek_mode::SET);
+    m_fp->read(ptr, at + len > m_calcd_len ? m_calcd_len : len);
+}
+
+size_t FileJSON::max_off() const
+{
+    return m_calcd_len;
+}
+
+/*
 constexpr size_t max_mem_len = 512; // bytes, testing fixed for now
 
 uint16_t MixedJSONRef::m_fp_name_ref = 0;
@@ -109,4 +142,4 @@ void MixedJSONRef::write(const char* ptr, const size_t len, const size_t at)
 size_t MixedJSONRef::max_off() const
 {
     return m_total_len;
-}
+}*/

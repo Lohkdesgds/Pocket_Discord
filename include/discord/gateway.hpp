@@ -219,7 +219,7 @@ namespace Lunaris {
 
         struct gateway_payload_structure {
             //char* d = nullptr;          // payload
-            MixedJSONRef* d_mx = nullptr; // new payload way
+            File* d_mx = nullptr; // new payload way
             const size_t d_len = 0;       // total payload length
             //gateway_opcodes op;         // j["op"]
             //int64_t s = -1;             // j["s"]
@@ -304,7 +304,7 @@ namespace Lunaris {
             gateway_opcodes op;         // j["op"]
             Gateway::event_handler func;
 
-            gateway_event_memory_block(MixedJSONRef*&&);
+            gateway_event_memory_block(FileJSON*&&);
             ~gateway_event_memory_block();
         };
     }

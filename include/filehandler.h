@@ -37,6 +37,8 @@ public:
     void seek(const long, const seek_mode);
     void flush();
 
+    long size() const;
+
     bool eof() const;
 
     bool good() const;

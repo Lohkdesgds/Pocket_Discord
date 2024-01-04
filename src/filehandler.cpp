@@ -241,6 +241,28 @@ FunctionWrapper fw_feof(volatile bool* don, FILE* to, bool* eof)
     }, new __tmp{to, eof, don }, [](void* p){ delete (__tmp*)p; });
 }
 
+FunctionWrapper fw_ftelllen(volatile bool* don, FILE* to, long* total_len)
+{    
+    if (!to) return {};
+
+    struct __tmp{
+        FILE* fp; // static ref (hopefully)
+        long* len;
+        volatile bool* done;
+    };
+    
+    return FunctionWrapper([](void* d){
+        __tmp* wk = (__tmp*)d;
+                
+        const auto was = ftell(wk->fp);
+        fseek(wk->fp, 0, SEEK_END);
+        *wk->len = ftell(wk->fp);
+        fseek(wk->fp, was, SEEK_SET);
+
+        *(wk->done) = true;
+    }, new __tmp{to, total_len, don }, [](void* p){ delete (__tmp*)p; });
+}
+
 
 
 File::File(const char* path, const char* mode)
@@ -328,6 +350,15 @@ void File::flush()
 {
     fp_w = false;
     FPWRK(fw_fflush(&fp_w, fp));
+}
+
+long File::size() const
+{
+    fp_w = false;
+    long answ = 0;
+    FPWRK(fw_ftelllen(&fp_w, fp, &answ));
+    while (!fp_w) vTaskDelay(pdMS_TO_TICKS(10)); // wait    
+    return answ;
 }
 
 bool File::eof() const
