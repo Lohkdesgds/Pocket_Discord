@@ -348,6 +348,11 @@ namespace Lunaris {
             DEL_IT(m_gateway);
         }
 
+        Gateway* BotBase::BotSelf::gateway() const
+        {
+            return m_gateway;
+        }
+
         BotBase::BotBase()
         {
             ESP_LOGI(TAG, "Starting BotBase...");

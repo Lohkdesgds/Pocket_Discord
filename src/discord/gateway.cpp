@@ -464,7 +464,7 @@ namespace Lunaris {
                                     "\"seq\":%lli"
                                 "}"
                             "}",
-                            static_cast<int>(gateway_send_events::IDENTIFY),
+                            static_cast<int>(gateway_send_events::RESUME),
                             this->m_token.c_str(),
                             this->m_session_id.c_str(),
                             this->m_last_sequence_number
@@ -487,6 +487,10 @@ namespace Lunaris {
                     ESP_LOGW(TAG, "[GWS] Task GATEWAY_SEND got ANY_NEED_RESTART and is triggering assistant for gateway automated restart.");
 
                     bool already_here = false;
+
+                    //auto* cpy = m_gateway_send_task;
+                    m_gateway_send_task = nullptr; // self delete
+
                     do {
                         if (already_here) ESP_LOGW(TAG, "[GWS] Still waiting for gateway to connect back... Trying restart again");
                         else              ESP_LOGW(TAG, "[GWS] Tasking gateway to restart...");
@@ -503,6 +507,8 @@ namespace Lunaris {
                         }
 
                     } while ((this->m_stats & gateway_status_binary::GW_CONNECTED) != gateway_status_binary::GW_CONNECTED);                    
+                    
+                    vTaskDelete(NULL);
                     return;
                 }       
             }

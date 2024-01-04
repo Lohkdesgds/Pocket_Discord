@@ -39,6 +39,8 @@ namespace Lunaris {
             public:
                 BotSelf(Gateway*);
                 ~BotSelf();
+
+                Gateway* gateway() const;
             };
 
         private:
