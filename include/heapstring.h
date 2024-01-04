@@ -27,4 +27,7 @@ public:
     void free();
 
     const char* c_str() const;
+
+    void prepare(const size_t);
+    char* prepared_data();
 };

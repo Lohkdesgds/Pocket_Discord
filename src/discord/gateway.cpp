@@ -283,7 +283,7 @@ namespace Lunaris {
 
         void Gateway::start_gateway()
         {
-            ESP_LOGI(TAG, "Starting gateway client...");
+            ESP_LOGI(TAG, "Preparing gateway client...");
 
             esp_websocket_client_config_t ws_cfg = {
                 .uri = (const char*) gateway_url,

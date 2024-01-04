@@ -339,8 +339,8 @@ namespace Lunaris {
     /// ==================== BotBase MANAGER CODE HERE ==================== ///
 
 
-        BotBase::BotSelf::BotSelf(Gateway* g)
-            : m_gateway(g)
+        BotBase::BotSelf::BotSelf(Gateway* g, HTTPS* h)
+            : m_gateway(g), m_https(h)
         {}
 
         BotBase::BotSelf::~BotSelf()
@@ -351,6 +351,11 @@ namespace Lunaris {
         Gateway* BotBase::BotSelf::gateway() const
         {
             return m_gateway;
+        }
+
+        HTTPS* BotBase::BotSelf::https() const
+        {
+            return m_https;
         }
 
         BotBase::BotBase()
@@ -384,7 +389,7 @@ namespace Lunaris {
 
         BotBase::BotSelf BotBase::make_bot(const char* token, const gateway_intents intents, const Gateway::event_handler function_handler)
         {
-            return BotBase::BotSelf(new Gateway(token, intents, function_handler));
+            return BotBase::BotSelf(new Gateway(token, intents, function_handler), new HTTPS(token));
         }
 
         void BotBase::destroy()

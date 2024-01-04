@@ -11,6 +11,7 @@
 #include "../useful.h"
 
 #include "discord/gateway.hpp"
+#include "discord/https.hpp"
 
 namespace Lunaris {
     namespace PocketDiscord {
@@ -36,11 +37,13 @@ namespace Lunaris {
         
             class BotSelf {
                 Gateway* m_gateway;
+                HTTPS* m_https;
             public:
-                BotSelf(Gateway*);
+                BotSelf(Gateway*, HTTPS*);
                 ~BotSelf();
 
                 Gateway* gateway() const;
+                HTTPS* https() const;
             };
 
         private:

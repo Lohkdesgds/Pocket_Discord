@@ -103,3 +103,14 @@ const char* HeapString::c_str() const
 {
     return mem;
 }
+
+void HeapString::prepare(const size_t l)
+{
+    free();
+    alloc_intern(l);
+}
+
+char* HeapString::prepared_data()
+{
+    return mem;
+}

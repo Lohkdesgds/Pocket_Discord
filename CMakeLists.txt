@@ -29,6 +29,7 @@ idf_component_register(
         src/heapstring.cpp
         src/filehandler.cpp
         src/functionwrapper.cpp
+        src/discord/https.cpp
         src/discord/gateway.cpp
         src/discord/core.cpp
     INCLUDE_DIRS include deps
