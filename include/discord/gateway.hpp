@@ -28,9 +28,6 @@ namespace Lunaris {
         constexpr unsigned gateway_queue_size_default = 30;
         constexpr unsigned gateway_poll_event_priority = 50;
         
-        const char app_version[] = "Lunaris V2.0.0 ALPHA";
-        const char target_app[] = "ESP32";
-
         const char cert_gateway_path[] = "cert/gateway.pem";
         
         // from Discord @ https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
@@ -246,56 +243,54 @@ namespace Lunaris {
         };
 
 
-
         class Gateway {
         public:
 	        typedef void(*event_handler)(const gateway_events&, const JSON&);
-
-            struct gateway_data {
-                // === // USER SET DATA // ==================================================================
-                gateway_intents m_intents;      // from constructor
-                HeapString m_token;             // from constructor
-                event_handler m_event_handler;  // from constructor
-                HeapString m_gateway_cert_perm;
-
-                // === // DATA OF BOT // ==================================================================
-                HeapString m_session_id;
-                HeapString m_bot_string;
-                uint64_t m_bot_id = 0;
-                
-                // === // HEARTBEAT RELATED // ==================================================================
-                uint32_t m_heartbeat_interval_ms = 0;               // if no heartbeat ack after this, reconnect.
-                int64_t m_last_sequence_number = -1;                // if last_sequence_number_set == false, consider this null.
-                bool m_heartbeat_got_confirm = true;                // on heartbeat sent, set false. If next heartbeat this is false, reconnect.
-                
-                // === // WORKING DATA // ==================================================================
-                esp_websocket_client_handle_t m_client_handle = nullptr;        // SETUP DONE (partially)
-                gateway_payload_structure* m_pay_work = nullptr;                // BEING USED
-                EventHandler m_event_loop;                                      // NOT USED YET
-                gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
-                uint64_t m_client_last_send = 0;
-                TaskHandle_t m_gateway_send_task = nullptr;
-                //gateway_status m_status = gateway_status::UNKNOWN;
-
-                bool send_raw_json(const char*, const size_t);
-
-                void summon_gateway_send_task();
-                void destroy_gateway_send_task();
-
-                gateway_data(const char*, const gateway_intents, const Gateway::event_handler);
-                ~gateway_data();
-
-                void start_gateway();
-                void close_gateway();
-            };
         private:
-            gateway_data* data = nullptr;
+            // === // USER SET DATA // ==================================================================
+            gateway_intents m_intents;      // from constructor
+            HeapString m_token;             // from constructor
+            event_handler m_event_handler;  // from constructor
+            HeapString m_gateway_cert_perm;
+
+            // === // DATA OF BOT // ==================================================================
+            HeapString m_session_id;
+            HeapString m_bot_string;
+            uint64_t m_bot_id = 0;
+            
+            // === // HEARTBEAT RELATED // ==================================================================
+            uint32_t m_heartbeat_interval_ms = 0;               // if no heartbeat ack after this, reconnect.
+            int64_t m_last_sequence_number = -1;                // if last_sequence_number_set == false, consider this null.
+            bool m_heartbeat_got_confirm = true;                // on heartbeat sent, set false. If next heartbeat this is false, reconnect.
+            
+            // === // WORKING DATA // ==================================================================
+            esp_websocket_client_handle_t m_client_handle = nullptr;        // SETUP DONE (partially)
+            gateway_payload_structure* m_pay_work = nullptr;                // BEING USED
+            EventHandler m_event_loop;                                      // NOT USED YET
+            gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
+            uint64_t m_client_last_send = 0;
+            TaskHandle_t m_gateway_send_task = nullptr;
+            //gateway_status m_status = gateway_status::UNKNOWN;
+
+            bool send_raw_json(const char*, const size_t);
+
+            void summon_gateway_send_task();
+            void destroy_gateway_send_task();
+
+            void start_gateway();
+            void close_gateway();
+            void full_restart_cleanup(); // close and start
+
+            void handle_secondary_tasks(); // ASYNC
+            void handle_gateway_events(int32_t event_id, void* event_data); // ASYNC
+
         public:
             // token, gateway
             Gateway(const char* token, const gateway_intents, const event_handler);
             ~Gateway();
 
             void stop();
+            void start();
         };
 
         struct gateway_event_memory_block {

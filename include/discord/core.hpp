@@ -8,6 +8,7 @@
 #include "../functionwrapper.h"
 #include "../ledhandler.h"
 #include "../eventhandler.h"
+#include "../useful.h"
 
 #include "discord/gateway.hpp"
 
@@ -28,20 +29,6 @@ namespace Lunaris {
             OFFLINE,
             CONNECTING,
             CONNECTED
-        };
-
-        struct ram_info {
-            nvs_stats_t nvs_stats;
-            const size_t mem_total;
-            const size_t mem_free;
-            const size_t memex_total;
-            const size_t memex_free;
-            const size_t mem32_total;
-            const size_t mem32_free;
-            const size_t memi_total;
-            const size_t memi_free;
-
-            ram_info();
         };
 
         class BotBase {

@@ -27,3 +27,6 @@
 
 // allocates with new[], should dealloc with delete[]
 #define saprintf(PPTR, SIZETPTR_LEN, FORMAT, ...) { int ____l = snprintf(nullptr, 0, FORMAT, __VA_ARGS__); PPTR = new char[____l + 1]; (*SIZETPTR_LEN) = static_cast<size_t>(____l); ____l = snprintf(PPTR, ____l + 1, FORMAT, __VA_ARGS__); if (____l < 0) { delete[] PPTR; PPTR = nullptr; (*SIZETPTR_LEN) = 0; }}
+
+const char app_version[] = "Lunaris V2.0.0 ALPHA";
+const char target_app[] = "ESP32";

@@ -19,9 +19,9 @@ namespace Lunaris {
 
         static const char TAG[] = "GATEWAY";
         
-        void __c_async_gateway_send_events(void*);
-        void __c_event_handler_intermedium(void*);
-        void __c_gateway_redirect_event(void*, esp_event_base_t, int32_t, void*);
+        //void __c_async_gateway_send_events(void*);
+        //void __c_event_handler_intermedium(void*);
+        //void __c_gateway_redirect_event(void*, esp_event_base_t, int32_t, void*);
         
         gateway_opcodes str2gateway_opcode(const char* s)
         {
@@ -232,7 +232,7 @@ namespace Lunaris {
         }
 
 
-        bool Gateway::gateway_data::send_raw_json(const char* str, const size_t len)
+        bool Gateway::send_raw_json(const char* str, const size_t len)
         {
             if (!m_client_handle) return false;
 #ifndef RELEASE
@@ -261,10 +261,10 @@ namespace Lunaris {
             }
         }
 
-        void Gateway::gateway_data::summon_gateway_send_task()
+        void Gateway::summon_gateway_send_task()
         {
             if (m_gateway_send_task) return;
-            xTaskCreate(__c_async_gateway_send_events, "GATEWAY2JOB", 3072, this, gateway_heartbeat_task_priority, &m_gateway_send_task);
+            xTaskCreate([](void* p){ ((Gateway*)p)->handle_secondary_tasks(); }, "GATEWAY2JOB", 3072, this, gateway_heartbeat_task_priority, &m_gateway_send_task);
             if (m_gateway_send_task == nullptr) {
                 ESP_LOGE(TAG, "[EV] PANIC: FATAL ERROR ON XTASKCREATE AT HELLO EVENT, CANNOT CREATE ESSENTIAL TASK FOR LIFE. RESTARTING SELF. DROPPING OFF!");
                 TABLE_FLIP_CHIP_I_AM_DEAD();
@@ -272,7 +272,7 @@ namespace Lunaris {
         }
 
         // safe to call within itself
-        void Gateway::gateway_data::destroy_gateway_send_task()
+        void Gateway::destroy_gateway_send_task()
         {
             if (m_gateway_send_task) {
                 auto* tmp = m_gateway_send_task;
@@ -281,29 +281,7 @@ namespace Lunaris {
             }
         }
 
-        Gateway::gateway_data::gateway_data(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : m_intents(intents), m_token(token), m_event_handler(evhlr), m_event_loop("GATEWAYC1E", 3, 4096, 4, 1)
-        {
-            ESP_LOGI(TAG, "Initializing Gateway for the first time, version %s for %s...", app_version, target_app);
-            ESP_LOGI(TAG, "TOKEN: %s", m_token.c_str());
-
-            ESP_LOGI(TAG, "Loading certificates...");
-                        
-            READFILE_FULLY_TO(m_gateway_cert_perm, cert_gateway_path, "Could not load gateway certificate.");
-
-            ESP_LOGI(TAG, "Certificate file loaded:\n\n%s\n", m_gateway_cert_perm.c_str());
-            
-            start_gateway();
-        }   
-
-        Gateway::gateway_data::~gateway_data()
-        {
-            ESP_LOGI(TAG, "Ending gateway second task...");
-            destroy_gateway_send_task();
-            close_gateway();
-        }
-
-        void Gateway::gateway_data::start_gateway()
+        void Gateway::start_gateway()
         {
             ESP_LOGI(TAG, "Starting gateway client...");
 
@@ -322,7 +300,7 @@ namespace Lunaris {
 
             ESP_LOGI(TAG, "Registering event handling...");
 
-            if (esp_websocket_register_events(m_client_handle, WEBSOCKET_EVENT_ANY, &__c_gateway_redirect_event, (void*)this) != ESP_OK) {
+            if (esp_websocket_register_events(m_client_handle, WEBSOCKET_EVENT_ANY, [](void* eha, esp_event_base_t eb, int32_t ei, void* ed){((Gateway*)eha)->handle_gateway_events(ei, ed); }, (void*)this) != ESP_OK) {
                 ESP_LOGE(TAG, "PANIC: Gateway could not have basic event set up properly. FORCING RESET.");
                 TABLE_FLIP_CHIP_I_AM_DEAD();
             }
@@ -337,7 +315,7 @@ namespace Lunaris {
             ESP_LOGI(TAG, "Initialized Gateway!");
         }
 
-        void Gateway::gateway_data::close_gateway()
+        void Gateway::close_gateway()
         {
             if (!m_client_handle) return; // nothing to do
 
@@ -369,79 +347,35 @@ namespace Lunaris {
             ESP_LOGI(TAG, "Cleaning up memory...");
 
             DEL_IT(m_pay_work);
+            m_stats = gateway_status_binary::NONE;            
             
             ESP_LOGI(TAG, "Gateway closed!");
         }
-        
 
-
-        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : data(new gateway_data(token, intents, evhlr))
-        {            
-        }
-
-        Gateway::~Gateway()
+        void Gateway::full_restart_cleanup()
         {
-            DEL_IT(data);
-        }
-        
-        void Gateway::stop()
-        {
-            DEL_IT(data);
-        }
-
-        gateway_event_memory_block::gateway_event_memory_block(char* s, const size_t l)
-            : ref(s), j(new JSON((const char*)s, l)), d((*j)["d"])
-        {
-                const auto j_op = (*j)["op"];
-                const auto j_s  = (*j)["s"];
-                const auto j_t  = (*j)["t"];
-
-                if (j_op.get_type() == JSON::type::NUMBER)   this->op = static_cast<gateway_opcodes>(j_op.get_int());
-                else                                         this->op = gateway_opcodes::UNKNOWN;
-
-                if (j_s.get_type() == JSON::type::NUMBER)    this->s = j_s.get_uint();
-                else                                         this->s = -1;
-
-                if (j_t.get_type() == JSON::type::STRING)    this->t = str2gateway_events(j_t);
-                else                                         this->t = gateway_events::UNKNOWN;    
-        }
-        
-        gateway_event_memory_block::~gateway_event_memory_block()
-        {
-            DEL_EM(ref);
-            DEL_IT(j);
-        }
-
-        void __c_async_full_restart(void* param)
-        {
-            Gateway::gateway_data& gw_data = *(Gateway::gateway_data*)param;
-
-            ESP_LOGI(TAG, "[GWEXT] RESTARTING GATEWAY EXTERNALLY IN 1 SECOND.");
+            ESP_LOGI(TAG, "[GWEXT] RESTARTING GATEWAY IN 1 SECOND.");
 
             vTaskDelay(pdMS_TO_TICKS(1000));
 
-            gw_data.close_gateway();
-            gw_data.start_gateway();
+            close_gateway();
+            start_gateway();
 
-            ESP_LOGI(TAG, "[GWEXT] DONE. DROPPING OFF.");
+            ESP_LOGI(TAG, "[GWEXT] DONE.");// DROPPING OFF.");            
+        }        
 
-            vTaskDelete(NULL);
-        }
-
-        void __c_async_gateway_send_events(void* param)
-        {
-            Gateway::gateway_data& gw_data = *(Gateway::gateway_data*)param;
-            
-            ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND started with %lu ms of heartbeat time.", gw_data.m_heartbeat_interval_ms);
+        void Gateway::handle_secondary_tasks()
+        //void __c_async_gateway_send_events(void* param)
+        {            
+            ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND started with %lu ms of heartbeat time.", this->m_heartbeat_interval_ms);
 
             char *_buffer = nullptr;
             size_t _len_buf = 0;
-            uint64_t heartbeat_next = get_time_ms() + gw_data.m_heartbeat_interval_ms;
+            uint64_t heartbeat_next = get_time_ms() + this->m_heartbeat_interval_ms;
             bool heartbeat_caused_by_time = false;
             bool did_a_task = false;
 
-            while ((gw_data.m_stats & gateway_status_binary::GW_CONNECTED) == gateway_status_binary::GW_CONNECTED)
+            while ((this->m_stats & gateway_status_binary::GW_CONNECTED) == gateway_status_binary::GW_CONNECTED)
             {
                 heartbeat_caused_by_time = (get_time_ms() >= heartbeat_next);
                 
@@ -450,49 +384,49 @@ namespace Lunaris {
                 did_a_task = false;
 
                 if (
-                    ((gw_data.m_stats & gateway_status_binary::DC_NEED_HEARTBEAT) == gateway_status_binary::DC_NEED_HEARTBEAT) || // if need, force it
-                    (heartbeat_caused_by_time && ((gw_data.m_stats & gateway_status_binary::DC_HEARTBEAT_AWAKE) == gateway_status_binary::DC_HEARTBEAT_AWAKE)) // need to be awake
+                    ((this->m_stats & gateway_status_binary::DC_NEED_HEARTBEAT) == gateway_status_binary::DC_NEED_HEARTBEAT) || // if need, force it
+                    (heartbeat_caused_by_time && ((this->m_stats & gateway_status_binary::DC_HEARTBEAT_AWAKE) == gateway_status_binary::DC_HEARTBEAT_AWAKE)) // need to be awake
                 ) {
                     did_a_task = true;
                     // Remove flags first
-                    gw_data.m_stats -= gateway_status_binary::DC_NEED_HEARTBEAT;
+                    this->m_stats -= gateway_status_binary::DC_NEED_HEARTBEAT;
 
-                    if (!gw_data.m_heartbeat_got_confirm && heartbeat_caused_by_time) {
+                    if (!this->m_heartbeat_got_confirm && heartbeat_caused_by_time) {
                         ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND did not get HEARTBEAT_ACK in time... Maybe restart?");
-                        gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                        this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
                     }
 
-                    gw_data.m_heartbeat_got_confirm = false;
+                    this->m_heartbeat_got_confirm = false;
 
                     ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND sending heartbeat...");                    
 
-                    if (gw_data.m_last_sequence_number >= 0) {
-                        saprintf(_buffer, &_len_buf, "{\"op\":%i,\"d\":%lli}", static_cast<int>(gateway_send_events::HEARTBEAT), gw_data.m_last_sequence_number);
+                    if (this->m_last_sequence_number >= 0) {
+                        saprintf(_buffer, &_len_buf, "{\"op\":%i,\"d\":%lli}", static_cast<int>(gateway_send_events::HEARTBEAT), this->m_last_sequence_number);
                     }
                     else {
                         saprintf(_buffer, &_len_buf, "{\"op\":%i,\"d\":null}", static_cast<int>(gateway_send_events::HEARTBEAT));
                     }
 
 
-                    if (!gw_data.send_raw_json(_buffer, _len_buf)) {
+                    if (!this->send_raw_json(_buffer, _len_buf)) {
                         ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND could not send heartbeat. Forcing try again with flag...");
-                        gw_data.m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
+                        this->m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
                     }
                     else {
                         ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND sent heartbeat.");
-                        heartbeat_next = get_time_ms() + static_cast<uint64_t>(gw_data.m_heartbeat_interval_ms);
+                        heartbeat_next = get_time_ms() + static_cast<uint64_t>(this->m_heartbeat_interval_ms);
                     }
 
                     DEL_EM(_buffer);
                 }
 
-                else if ((gw_data.m_stats & gateway_status_binary::DC_NEED_IDENTIFY) == gateway_status_binary::DC_NEED_IDENTIFY)
+                else if ((this->m_stats & gateway_status_binary::DC_NEED_IDENTIFY) == gateway_status_binary::DC_NEED_IDENTIFY)
                 {
                     did_a_task = true;
                     // Remove flags first
-                    gw_data.m_stats -= gateway_status_binary::DC_NEED_IDENTIFY;
+                    this->m_stats -= gateway_status_binary::DC_NEED_IDENTIFY;
 
-                    if (gw_data.m_session_id.size() == 0) {
+                    if (this->m_session_id.size() == 0) {
 
                         ESP_LOGI(TAG, "[GWS] Identifying self...");
 
@@ -510,8 +444,8 @@ namespace Lunaris {
                                 "}"
                             "}",
                             static_cast<int>(gateway_send_events::IDENTIFY),
-                            gw_data.m_token.c_str(),
-                            static_cast<uint32_t>(gw_data.m_intents),
+                            this->m_token.c_str(),
+                            static_cast<uint32_t>(this->m_intents),
                             esp_get_idf_version(),
                             app_version,
                             target_app
@@ -531,15 +465,15 @@ namespace Lunaris {
                                 "}"
                             "}",
                             static_cast<int>(gateway_send_events::IDENTIFY),
-                            gw_data.m_token.c_str(),
-                            gw_data.m_session_id.c_str(),
-                            gw_data.m_last_sequence_number
+                            this->m_token.c_str(),
+                            this->m_session_id.c_str(),
+                            this->m_last_sequence_number
                         );
                     }
                     
-                    if (!gw_data.send_raw_json(_buffer, _len_buf)) {
+                    if (!this->send_raw_json(_buffer, _len_buf)) {
                         ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND could not send identify. Forcing try again with flag...");
-                        gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                        this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
                     }
                     else {
                         ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND sent identify.");
@@ -547,37 +481,35 @@ namespace Lunaris {
 
                     DEL_EM(_buffer);
                 }
-                else if ((gw_data.m_stats & gateway_status_binary::ANY_NEED_RESTART) == gateway_status_binary::ANY_NEED_RESTART)
+                else if ((this->m_stats & gateway_status_binary::ANY_NEED_RESTART) == gateway_status_binary::ANY_NEED_RESTART)
                 {
-                    gw_data.m_stats -= gateway_status_binary::ANY_NEED_RESTART;
+                    this->m_stats -= gateway_status_binary::ANY_NEED_RESTART;
                     ESP_LOGW(TAG, "[GWS] Task GATEWAY_SEND got ANY_NEED_RESTART and is triggering assistant for gateway automated restart.");
-                    xTaskCreate(__c_async_full_restart, "RESTARTGW", 1024, param, gateway_heartbeat_task_priority, NULL);
-                    ESP_LOGW(TAG, "[GWS] Hopefully it does everything correct. Dropping this one off.");
-                    // killing itself.
-                    gw_data.destroy_gateway_send_task();
+
+                    bool already_here = false;
+                    do {
+                        if (already_here) ESP_LOGW(TAG, "[GWS] Still waiting for gateway to connect back... Trying restart again");
+                        else              ESP_LOGW(TAG, "[GWS] Tasking gateway to restart...");
+                        
+                        this->full_restart_cleanup();
+
+                        already_here = true;
+
+                        const uint64_t wait_time = get_time_ms() + 30000;
+
+                        while ((this->m_stats & gateway_status_binary::GW_CONNECTED) != gateway_status_binary::GW_CONNECTED && get_time_ms() < wait_time)
+                        {
+                            vTaskDelay(pdMS_TO_TICKS(100));
+                        }
+
+                    } while ((this->m_stats & gateway_status_binary::GW_CONNECTED) != gateway_status_binary::GW_CONNECTED);                    
                     return;
-                }
-       
+                }       
             }
-
-            // removes self reference and kill itself.
-            gw_data.destroy_gateway_send_task();
-        }
-
-        // workaround for single void* to Gateway func
-        
-        void ___del_event_data(void* p) {delete (gateway_event_memory_block*)p; }
-
-
-        void __c_event_handler_intermedium(void* argument)
-        {
-            gateway_event_memory_block* evd = (gateway_event_memory_block*)argument;
-            evd->func(evd->t, *evd->j);
         }
         
-        void __c_gateway_redirect_event(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
+        void Gateway::handle_gateway_events(int32_t event_id, void* event_data)
         {
-            Gateway::gateway_data& gw_data = *(Gateway::gateway_data*)event_handler_arg;
             esp_websocket_event_data_t* data = (esp_websocket_event_data_t*)event_data;
 
             try {
@@ -605,26 +537,26 @@ namespace Lunaris {
                 switch (event_id) {
                 case WEBSOCKET_EVENT_CONNECTED:
                     ESP_LOGW(TAG, "[EV] Initialized Gateway.");
-                    gw_data.m_stats = gateway_status_binary::GW_CONNECTED; // as start, start fresh
-                    //gw_data.m_stats += gateway_status_binary::GW_CONNECTED;
-                    //gw_data.m_stats -= gateway_status_binary::GW_CLOSED;
-                    //gw_data.m_stats -= gateway_status_binary::GW_ERROR_NEED_HELP;
-                    //gw_data.m_stats -= gateway_status_binary::ANY_NEED_RESTART;
+                    this->m_stats = gateway_status_binary::GW_CONNECTED; // as start, start fresh
+                    //this->m_stats += gateway_status_binary::GW_CONNECTED;
+                    //this->m_stats -= gateway_status_binary::GW_CLOSED;
+                    //this->m_stats -= gateway_status_binary::GW_ERROR_NEED_HELP;
+                    //this->m_stats -= gateway_status_binary::ANY_NEED_RESTART;
 
                     break;
                 case WEBSOCKET_EVENT_DATA:
                 {
                     if(data->op_code != WS_TRANSPORT_OPCODES_TEXT && data->op_code != WS_TRANSPORT_OPCODES_CLOSE) break;
 
-                    if (data->payload_offset == 0) { DEL_IT(gw_data.m_pay_work); gw_data.m_pay_work = new gateway_payload_structure(data->payload_len); }
-                    const int ret = gw_data.m_pay_work->append(data->data_ptr, data->data_len, data->payload_offset);
+                    if (data->payload_offset == 0) { DEL_IT(this->m_pay_work); this->m_pay_work = new gateway_payload_structure(data->payload_len); }
+                    const int ret = this->m_pay_work->append(data->data_ptr, data->data_len, data->payload_offset);
 
-                    gateway_payload_structure& ps = *gw_data.m_pay_work;
+                    gateway_payload_structure& ps = *this->m_pay_work;
                     gateway_event_memory_block* eb = ps.last_event_block;
 
                     // SUCCESS! (end)
                     if (ret == 1 && eb) {
-                        if (gw_data.m_last_sequence_number < eb->s) gw_data.m_last_sequence_number = eb->s;
+                        if (this->m_last_sequence_number < eb->s) this->m_last_sequence_number = eb->s;
 
                         switch(eb->op) {
                         case gateway_opcodes::DISPATCH:                 // [RECEIVE]        // An event was dispatched.
@@ -633,92 +565,98 @@ namespace Lunaris {
 
                                 ESP_LOGI(TAG, "[EV] Retrieving user session and id...");
 
-                                gw_data.m_session_id    = (eb->d)["session_id"].get_string();
-                                gw_data.m_bot_id        = (eb->d)["user"]["id"].get_uint();
-                                gw_data.m_bot_string    = (eb->d)["user"]["username"].get_string();
+                                this->m_session_id    = (eb->d)["session_id"].get_string();
+                                this->m_bot_id        = (eb->d)["user"]["id"].get_uint();
+                                this->m_bot_string    = (eb->d)["user"]["username"].get_string();
                                 
-                                ESP_LOGI(TAG, "[EV] Ready, started with session=%s, id=%llu, username=%s.", gw_data.m_session_id.c_str(), gw_data.m_bot_id, gw_data.m_bot_string.c_str());
+                                ESP_LOGI(TAG, "[EV] Ready, started with session=%s, id=%llu, username=%s.", this->m_session_id.c_str(), this->m_bot_id, this->m_bot_string.c_str());
 
                                 break;
                             case gateway_events::RESUMED:
                                 ESP_LOGI(TAG, "[EV] Got RESUMED!");
-                                gw_data.m_stats += gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                                this->m_stats += gateway_status_binary::DC_HEARTBEAT_AWAKE;
                                 break;
                             case gateway_events::RECONNECT:
                                 // NOT IMPLEMENTED
                                 ESP_LOGW(TAG, "[EV] Got Reconnect from DISPATCH.");
-                                gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
-                                //gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
-                                gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                                this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                                //this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                                this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                                 //TABLE_FLIP_CHIP_I_AM_DEAD();
                                 break;
                             case gateway_events::INVALID_SESSION:
                                 // NOT IMPLEMENTED
                                 ESP_LOGE(TAG, "[EV] Got Invalid Session from DISPATCH.");
-                                gw_data.m_session_id.free();
-                                gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
-                                //gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
-                                gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                                this->m_session_id.free();
+                                this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                                //this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                                this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                                 //TABLE_FLIP_CHIP_I_AM_DEAD();
                                 break;
                             default:
                                 break;
                             }
 
-                            if (gw_data.m_event_handler) {
-                                eb->func = gw_data.m_event_handler;
-                                //___event_data* evd = new ___event_data {ps.t, (JSON&&)(*ps.j), gw_data.m_event_handler };
+                            if (this->m_event_handler) {
+                                eb->func = this->m_event_handler;
+                                //___event_data* evd = new ___event_data {ps.t, (JSON&&)(*ps.j), this->m_event_handler };
 
                                 // MOVING EB (ps.last_event_block) HERE:
-                                gw_data.m_event_loop.post(FunctionWrapper(__c_event_handler_intermedium, (void*)eb , ___del_event_data));
+                                this->m_event_loop.post(
+                                    FunctionWrapper(
+                                        [](void* arg){gateway_event_memory_block* evd = (gateway_event_memory_block*)arg; evd->func(evd->t, *evd->j);},
+                                        (void*)eb,
+                                        [](void* p){ delete (gateway_event_memory_block*)p; }
+                                    )
+                                );
                                 eb =ps.last_event_block = nullptr;
                             }
                             break;
                         case gateway_opcodes::HEARTBEAT:                // [SEND/RECEIVE]   // Fired periodically by the client to keep the connection alive.
                             ESP_LOGW(TAG, "[EV] OP: HEARTBEAT, Discord asked for one.");
-                            gw_data.m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
+                            this->m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
                             break;
                         case gateway_opcodes::RECONNECT:                // [RECEIVE]        // You should attempt to reconnect and resume immediately.
                             // NOT IMPLEMENTED
                             ESP_LOGW(TAG, "[EV] OP: Got Reconnect.");
-                            gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
-                            //gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
-                            gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                            this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                            //this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                            this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                             //TABLE_FLIP_CHIP_I_AM_DEAD();
                             break;
                         case gateway_opcodes::INVALID_SESSION:          // [RECEIVE]        // The session has been invalidated. You should reconnect and identify/resume accordingly.
                             // NOT IMPLEMENTED
                             ESP_LOGE(TAG, "[EV] OP: Got Invalid Session.");
-                            gw_data.m_session_id.free();
-                            gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
-                            //gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
-                            gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                            this->m_session_id.free();
+                            this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                            //this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                            this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                             //TABLE_FLIP_CHIP_I_AM_DEAD();
                             break;
                         case gateway_opcodes::HELLO:                    // [RECEIVE]        // Sent immediately after connecting, contains the heartbeat_interval to use.
                             ESP_LOGI(TAG, "[EV] OP: HELLO, working on it...");
                             {
-                                gw_data.m_heartbeat_interval_ms = static_cast<int32_t>((eb->d)["heartbeat_interval"].get_int());
-                                if (gw_data.m_heartbeat_interval_ms < 100) {
+                                this->m_heartbeat_interval_ms = static_cast<int32_t>((eb->d)["heartbeat_interval"].get_int());
+                                if (this->m_heartbeat_interval_ms < 100) {
                                     ESP_LOGE(TAG, "[EV] PANIC: FATAL ERROR ON HEARTBEAT_INTERVAL_MS AT HELLO EVENT, TIME IS BROKEN (< 100 ms). RESTARTING SELF. DROPPING OFF!");
                                     TABLE_FLIP_CHIP_I_AM_DEAD();
                                 }
 
-                                gw_data.m_stats += gateway_status_binary::DC_HEARTBEAT_AWAKE;
-                                gw_data.m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
-                                gw_data.m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
-                                gw_data.m_heartbeat_got_confirm = true;
+                                this->m_stats += gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                                this->m_stats += gateway_status_binary::DC_NEED_HEARTBEAT;
+                                this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
+                                this->m_heartbeat_got_confirm = true;
 
                                 ESP_LOGI(TAG, "[EV] HELLO triggered gateway send task, identifying soon...");
-                                gw_data.summon_gateway_send_task();
+                                this->summon_gateway_send_task();
                             }
                             break;
 
                         // ========== | OK | ========== //
                         case gateway_opcodes::HEARTBEAT_ACK:            // [RECEIVE]        // Sent in response to receiving a heartbeat to acknowledge that it has been received.
                             ESP_LOGI(TAG, "[EV] OP: HEARTBEAT ACK, good.");
-                            //gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_NO_ACK; // just unflag the error if gets heartbeat
-                            gw_data.m_heartbeat_got_confirm = true;
+                            //this->m_stats -= gateway_status_binary::DC_HEARTBEAT_NO_ACK; // just unflag the error if gets heartbeat
+                            this->m_heartbeat_got_confirm = true;
                             break;
                         default:
                             break;
@@ -728,18 +666,18 @@ namespace Lunaris {
                     break;
                 case WEBSOCKET_EVENT_ERROR:
                     ESP_LOGE(TAG, "[EV] Error on gateway. Asking for restart...");
-                    gw_data.m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                    this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
                     break;
                 case WEBSOCKET_EVENT_DISCONNECTED:            
                     ESP_LOGW(TAG, "[EV] Gateway disconnected.");
-                    gw_data.m_stats -= gateway_status_binary::GW_CONNECTED;
-                    gw_data.m_stats += gateway_status_binary::GW_CLOSED; // just so flag is set. Id doesn't mean it was clean.
-                    gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                    this->m_stats -= gateway_status_binary::GW_CONNECTED;
+                    this->m_stats += gateway_status_binary::GW_CLOSED; // just so flag is set. Id doesn't mean it was clean.
+                    this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                     break;
                 case WEBSOCKET_EVENT_CLOSED:
                     ESP_LOGW(TAG, "[EV] Gateway closed cleanly.");
-                    gw_data.m_stats += gateway_status_binary::GW_CLOSED;
-                    gw_data.m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
+                    this->m_stats += gateway_status_binary::GW_CLOSED;
+                    this->m_stats -= gateway_status_binary::DC_HEARTBEAT_AWAKE;
                     break;
                 default:
                     ESP_LOGW(TAG, "[EV] Gateway got UNKNOWN EVENT ID. Not handling it.");
@@ -754,6 +692,64 @@ namespace Lunaris {
                 ESP_LOGE(TAG, "[EV] EXCEPTION! Unknown error");
             }
 
+        }
+
+        Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
+            : m_intents(intents), m_token(token), m_event_handler(evhlr), m_event_loop("GATEWAYC1E", 3, 4096, 4, 1)
+        {
+            ESP_LOGI(TAG, "Initializing Gateway for the first time, version %s for %s...", app_version, target_app);
+            ESP_LOGI(TAG, "TOKEN: %s", m_token.c_str());
+
+            ESP_LOGI(TAG, "Loading certificates...");
+                        
+            READFILE_FULLY_TO(m_gateway_cert_perm, cert_gateway_path, "Could not load gateway certificate.");
+
+            ESP_LOGI(TAG, "Certificate file loaded:\n\n%s\n", m_gateway_cert_perm.c_str());
+            
+            start_gateway();
+        }
+
+        Gateway::~Gateway()
+        {
+            stop();
+        }
+        
+        void Gateway::stop()
+        {
+            ESP_LOGI(TAG, "Ending gateway...");
+            destroy_gateway_send_task();
+            close_gateway();
+            ESP_LOGI(TAG, "Ended gateway.");
+        }
+
+        void Gateway::start()
+        {
+            ESP_LOGI(TAG, "Starting gateway...");
+            start_gateway();
+            ESP_LOGI(TAG, "Started gateway.");
+        }
+
+        gateway_event_memory_block::gateway_event_memory_block(char* s, const size_t l)
+            : ref(s), j(new JSON((const char*)s, l)), d((*j)["d"])
+        {
+                const auto j_op = (*j)["op"];
+                const auto j_s  = (*j)["s"];
+                const auto j_t  = (*j)["t"];
+
+                if (j_op.get_type() == JSON::type::NUMBER)   this->op = static_cast<gateway_opcodes>(j_op.get_int());
+                else                                         this->op = gateway_opcodes::UNKNOWN;
+
+                if (j_s.get_type() == JSON::type::NUMBER)    this->s = j_s.get_uint();
+                else                                         this->s = -1;
+
+                if (j_t.get_type() == JSON::type::STRING)    this->t = str2gateway_events(j_t);
+                else                                         this->t = gateway_events::UNKNOWN;    
+        }
+        
+        gateway_event_memory_block::~gateway_event_memory_block()
+        {
+            DEL_EM(ref);
+            DEL_IT(j);
         }
 
     }
