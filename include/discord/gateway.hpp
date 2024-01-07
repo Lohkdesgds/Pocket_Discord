@@ -7,10 +7,11 @@
 #include "esp_websocket_client.h"
 #include "esp_transport_ws.h"
 
-#include "../eventhandler.h"
-#include "../filehandler.h"
+#include "eventhandler.h"
+#include "filehandler.h"
 #include "heapstring.h"
 #include "LJSON/json.h"
+#include "discord/https.hpp"
 
 
 namespace Lunaris {
@@ -242,11 +243,23 @@ namespace Lunaris {
             void free();
         };
 
+        class Gateway;
+
+        // filter malicious or problematic stuff from user on event. Also, pre-do some gateway stuff
+        class GatewayBot{
+            Gateway& m_gateway;
+        public:
+            GatewayBot(Gateway&);
+
+            bool update_presence(const char* name, const char* state, const int type, const char* url = nullptr);
+        };
 
         class Gateway {
         public:
-	        typedef void(*event_handler)(const gateway_events&, const JSON&);
+	        typedef void(*event_handler)(const gateway_events&, const JSON&, HTTPS*, GatewayBot);
         private:
+            friend class GatewayBot;
+
             // === // USER SET DATA // ==================================================================
             gateway_intents m_intents;      // from constructor
             HeapString m_token;             // from constructor
@@ -270,6 +283,7 @@ namespace Lunaris {
             gateway_status_binary m_stats = gateway_status_binary::NONE;    // Partially used
             uint64_t m_client_last_send = 0;
             TaskHandle_t m_gateway_send_task = nullptr;
+            HTTPS* m_https_ref_only; // for events
             //gateway_status m_status = gateway_status::UNKNOWN;
 
             bool send_raw_json(const char*, const size_t);
@@ -283,24 +297,27 @@ namespace Lunaris {
 
             void handle_secondary_tasks(); // ASYNC
             void handle_gateway_events(int32_t event_id, void* event_data); // ASYNC
-
         public:
             // token, gateway
             Gateway(const char* token, const gateway_intents, const event_handler);
             ~Gateway();
+
+            void set_https(HTTPS*);
 
             void stop();
             void start();
         };
 
         struct gateway_event_memory_block {
-            char* ref;
+            HTTPS* m_https_ref_only = nullptr;
+            char* ref = nullptr;
             const JSON* j;
             const JSON d;
             gateway_events t;           // j["t"] aka ev_id
             int64_t s = -1;             // j["s"]
             gateway_opcodes op;         // j["op"]
             Gateway::event_handler func;
+            Gateway* gw = nullptr;
 
             gateway_event_memory_block(char*, const size_t);
             ~gateway_event_memory_block();

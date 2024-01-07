@@ -341,7 +341,9 @@ namespace Lunaris {
 
         BotBase::BotSelf::BotSelf(Gateway* g, HTTPS* h)
             : m_gateway(g), m_https(h)
-        {}
+        {
+            if (m_gateway) m_gateway->set_https(m_https);
+        }
 
         BotBase::BotSelf::~BotSelf()
         {

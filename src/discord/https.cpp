@@ -270,9 +270,9 @@ namespace Lunaris {
             
             ESP_LOGI(TAG, "Creating and configuring...");
 
-            start();
-            
-            ESP_LOGI(TAG, "HTTPS ready.");
+            ESP_LOGI(TAG, "HTTPS ready to start at any request.");
+
+            //start();            
         }
 
         HTTPS::HTTPS(HTTPS&& o) noexcept

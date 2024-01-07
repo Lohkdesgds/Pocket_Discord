@@ -231,6 +231,32 @@ namespace Lunaris {
             DEL_IT(last_event_block); // delete if not moved
         }
 
+        GatewayBot::GatewayBot(Gateway& ref)
+            : m_gateway(ref)
+        {}
+        
+        bool GatewayBot::update_presence(const char* name, const char* state, const int type, const char* url)
+        {
+            char* buf = nullptr;
+            size_t len = 0;
+
+            if (url) {
+                saprintf(buf, &len, 
+                    "{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i,\"url\":\"%s\"}",
+                    name, state, type, url
+                );
+            }
+            else {
+                saprintf(buf, &len, 
+                    "{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i}",
+                    name, state, type
+                );
+            }
+            const bool gud = m_gateway.send_raw_json(buf, len);
+            delete[] buf;
+            return gud;
+        }
+
 
         bool Gateway::send_raw_json(const char* str, const size_t len)
         {
@@ -434,7 +460,7 @@ namespace Lunaris {
                             "{"
                                 "\"op\":%i,"
                                 "\"d\":{"
-                                    "\"token\":\"%s\","
+                                    "\"token\":\"%.*s\","
                                     "\"intents\":%lu,"
                                     "\"properties\":{"
                                         "\"$os\":\"esp-idf (%s)\","
@@ -444,7 +470,7 @@ namespace Lunaris {
                                 "}"
                             "}",
                             static_cast<int>(gateway_send_events::IDENTIFY),
-                            this->m_token.c_str(),
+                            m_token.size(), m_token.c_str(),
                             static_cast<uint32_t>(this->m_intents),
                             esp_get_idf_version(),
                             app_version,
@@ -476,7 +502,7 @@ namespace Lunaris {
                         this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
                     }
                     else {
-                        ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND sent identify.");
+                        ESP_LOGI(TAG, "[GWS] Task GATEWAY_SEND sent identify with token = %.*s.", m_token.size(), m_token.c_str());
                     }
 
                     DEL_EM(_buffer);
@@ -552,6 +578,11 @@ namespace Lunaris {
                     break;
                 case WEBSOCKET_EVENT_DATA:
                 {
+                    if (data->op_code == WS_TRANSPORT_OPCODES_CLOSE) {
+                        ESP_LOGW(TAG, "[EV] DATA received on close: %.*s!", data->data_len, data->data_ptr);
+                        this->m_stats += gateway_status_binary::ANY_NEED_RESTART;
+                    }
+
                     if(data->op_code != WS_TRANSPORT_OPCODES_TEXT && data->op_code != WS_TRANSPORT_OPCODES_CLOSE) break;
 
                     if (data->payload_offset == 0) { DEL_IT(this->m_pay_work); this->m_pay_work = new gateway_payload_structure(data->payload_len); }
@@ -608,9 +639,11 @@ namespace Lunaris {
                                 //___event_data* evd = new ___event_data {ps.t, (JSON&&)(*ps.j), this->m_event_handler };
 
                                 // MOVING EB (ps.last_event_block) HERE:
+                                eb->m_https_ref_only = m_https_ref_only;
+                                eb->gw = this;
                                 this->m_event_loop.post(
                                     FunctionWrapper(
-                                        [](void* arg){gateway_event_memory_block* evd = (gateway_event_memory_block*)arg; evd->func(evd->t, *evd->j);},
+                                        [](void* arg){gateway_event_memory_block* evd = (gateway_event_memory_block*)arg; evd->func(evd->t, evd->d, evd->m_https_ref_only, GatewayBot(*evd->gw));},
                                         (void*)eb,
                                         [](void* p){ delete (gateway_event_memory_block*)p; }
                                     )
@@ -653,7 +686,7 @@ namespace Lunaris {
                                 this->m_stats += gateway_status_binary::DC_NEED_IDENTIFY;
                                 this->m_heartbeat_got_confirm = true;
 
-                                ESP_LOGI(TAG, "[EV] HELLO triggered gateway send task, identifying soon...");
+                                ESP_LOGI(TAG, "[EV] HELLO triggered gateway send task, starting parallel send task and identifying soon...");
                                 this->summon_gateway_send_task();
                             }
                             break;
@@ -701,7 +734,7 @@ namespace Lunaris {
         }
 
         Gateway::Gateway(const char* token, const gateway_intents intents, const Gateway::event_handler evhlr)
-            : m_intents(intents), m_token(token), m_event_handler(evhlr), m_event_loop("GATEWAYC1E", 3, 4096, 4, 1)
+            : m_intents(intents), m_token(token), m_event_handler(evhlr), m_event_loop("GATEWAYC1E", 3, 4096, 4, 1), m_https_ref_only(nullptr)
         {
             ESP_LOGI(TAG, "Initializing Gateway for the first time, version %s for %s...", app_version, target_app);
             ESP_LOGI(TAG, "TOKEN: %s", m_token.c_str());
@@ -720,6 +753,11 @@ namespace Lunaris {
             stop();
         }
         
+        void Gateway::set_https(HTTPS* h)
+        {
+            if (h) m_https_ref_only = h;
+        }
+        
         void Gateway::stop()
         {
             ESP_LOGI(TAG, "Ending gateway...");
@@ -736,7 +774,7 @@ namespace Lunaris {
         }
 
         gateway_event_memory_block::gateway_event_memory_block(char* s, const size_t l)
-            : ref(s), j(new JSON((const char*)s, l)), d((*j)["d"])
+            : m_https_ref_only(nullptr), ref(s), j(new JSON((const char*)s, l)), d((*j)["d"])
         {
                 const auto j_op = (*j)["op"];
                 const auto j_s  = (*j)["s"];
