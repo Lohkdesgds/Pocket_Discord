@@ -82,6 +82,8 @@ namespace Lunaris {
 
             void start();
             void stop();
+            
+            JSON _request(bool&, const http_request, const char*, const char* = nullptr, const size_t = 0);
         public:
             HTTPS(const HTTPS&) = delete;
             void operator=(const HTTPS&) = delete;

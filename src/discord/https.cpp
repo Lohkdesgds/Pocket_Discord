@@ -253,6 +253,57 @@ namespace Lunaris {
             ESP_LOGI(TAG, "HTTPS closed!");
         }
         
+        JSON HTTPS::_request(bool& ended_gud, const http_request r, const char* path, const char* data, const size_t data_len)
+        {
+            //static JSON empty_json = JSON("{}");
+
+            if (!m_ref) start();
+            
+            if (m_rl.got_limited) {
+                m_rl.got_limited = false;
+                const double secs = (m_rl.wait_seconds - 0.001 * (get_time_ms() - m_rl.triggered_at));
+                if (secs > 0.0) {
+                    const uint64_t msecs = static_cast<uint64_t>(1000.0 * secs + 1);
+                    ESP_LOGW(TAG, "Got rate-limited, waiting %llu ms", msecs);
+                    vTaskDelay(pdMS_TO_TICKS(msecs));
+                }
+            }
+
+            esp_http_client_set_method(m_ref, http_request2esp(r));
+
+            {
+                char* buf = nullptr;
+                size_t buf_len = 0;
+                saprintf(buf, &buf_len, "%s%s", http_url, path);
+                
+                esp_http_client_set_url(m_ref, buf);
+                delete[] buf;
+            }
+
+            if (data && data_len > 0) esp_http_client_set_post_field(m_ref, data, data_len);
+
+            esp_err_t err = ESP_OK;
+            while (1) {
+                err = esp_http_client_perform(m_ref);
+                if (err != ESP_ERR_HTTP_EAGAIN) {
+                    break;
+                }
+            }
+
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Error perform http request %s", esp_err_to_name(err));
+                stop();
+                ended_gud = false;
+                return JSON("{}");
+            }
+
+            m_status = esp_http_client_get_status_code(m_ref);
+            ESP_LOGI(TAG, "Performed HTTP %s @ %s; Got status=%i.", http_request2str(r), path, m_status);
+            ended_gud = true;
+
+            return j ? (JSON&&)*j : JSON("{}");
+        }
+        
         HTTPS::HTTPS(const char* token)
             : m_token(token)
         {            
@@ -299,51 +350,14 @@ namespace Lunaris {
         
         JSON HTTPS::request(const http_request r, const char* path, const char* data, const size_t data_len)
         {
-            //static JSON empty_json = JSON("{}");
-
-            if (!m_ref) start();
-            
-            if (m_rl.got_limited) {
-                m_rl.got_limited = false;
-                const double secs = (m_rl.wait_seconds - 0.001 * (get_time_ms() - m_rl.triggered_at));
-                if (secs > 0.0) {
-                    const uint64_t msecs = static_cast<uint64_t>(1000.0 * secs + 1);
-                    ESP_LOGW(TAG, "Got rate-limited, waiting %llu ms", msecs);
-                    vTaskDelay(pdMS_TO_TICKS(msecs));
-                }
-            }
-
-            esp_http_client_set_method(m_ref, http_request2esp(r));
-
-            {
-                char* buf = nullptr;
-                size_t buf_len = 0;
-                saprintf(buf, &buf_len, "%s%s", http_url, path);
-                
-                esp_http_client_set_url(m_ref, buf);
-                delete[] buf;
-            }
-
-            if (data && data_len > 0) esp_http_client_set_post_field(m_ref, data, data_len);
-
-            esp_err_t err = ESP_OK;
-            while (1) {
-                err = esp_http_client_perform(m_ref);
-                if (err != ESP_ERR_HTTP_EAGAIN) {
-                    break;
-                }
-            }
-
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Error perform http request %s", esp_err_to_name(err));
+            bool gud = true;
+            JSON dat = _request(gud, r, path, data, data_len);
+            if (!gud) {
                 stop();
-                return JSON("{}");
+                start();
+                return _request(gud, r, path, data, data_len);
             }
-
-            m_status = esp_http_client_get_status_code(m_ref);
-            ESP_LOGI(TAG, "Performed HTTP %s @ %s; Got status=%i.", http_request2str(r), path, m_status);
-
-            return j ? (JSON&&)*j : JSON("{}");
+            return (JSON&&)dat;
         }
 
         //const JSON* HTTPS::json() const
