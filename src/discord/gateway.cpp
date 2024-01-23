@@ -231,31 +231,209 @@ namespace Lunaris {
             DEL_IT(last_event_block); // delete if not moved
         }
 
+        const char* GatewayPresence::get_status_str() const
+        {
+            switch(m_status) {
+            case status::DND:       return "dnd";
+            case status::IDLE:      return "idle";
+            case status::INVISIBLE: return "invisible";
+            case status::OFFLINE:   return "offline";
+            default:                return "online";
+            }
+        }
+        
+        GatewayPresence::GatewayPresence(GatewayPresence&& o) noexcept
+            : m_name((HeapString&&)o.m_name), m_state((HeapString&&)o.m_state),
+            m_url((HeapString&&)o.m_url), m_status(o.m_status),
+            m_buf(o.m_buf), m_afk(o.m_afk), m_type(o.m_type)
+        {
+        }
+
+        void GatewayPresence::operator=(GatewayPresence&& o) noexcept
+        {
+            DEL_EM(m_buf);
+
+            m_name = (HeapString&&)o.m_name;
+            m_state = (HeapString&&)o.m_state;
+            m_url = (HeapString&&)o.m_url;
+            EXCHANGE(m_status, o.m_status, status::ONLINE);
+            EXCHANGE(m_buf, o.m_buf, nullptr);
+            EXCHANGE(m_afk, o.m_afk, false);
+            EXCHANGE(m_type, o.m_type, type::GAME);
+        }        
+        
+        GatewayPresence::~GatewayPresence()
+        {
+            DEL_EM(m_buf);
+        }
+
+        GatewayPresence& GatewayPresence::set_gaming (const char* name, const char* state)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::GAME;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_streaming (const char* name, const char* state, const char* url)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::STREAMING;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_listening (const char* name, const char* state)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::LISTENING;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_watching (const char* name, const char* state)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::WATCHING;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_custom (const char* name, const char* state)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::CUSTOM;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_competing (const char* name, const char* state)
+        {
+            m_name = name;
+            m_state = state;
+            m_type = type::COMPETING;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_status(const status s)
+        {
+            m_status = s;
+            return *this;
+        }
+
+        GatewayPresence& GatewayPresence::set_afk(const bool b)
+        {
+            m_afk = b;
+            return *this;
+        }
+
+        const char* GatewayPresence::gen()
+        {
+            DEL_EM(m_buf);
+            size_t len = 0;
+            const uint64_t m_since = get_time_ms();
+
+            switch(m_type) {
+            case type::STREAMING:
+                if (m_state.size() > 0) {
+                    saprintf(m_buf, &len,
+                        "{\"op\":%i,\"d\":{\"since\":%llu,\"activities\":[{\"url\":\"%.*s\",\"name\":\"%.*s\",\"state\":\"%.*s\",\"type\":%i}],\"status\":\"%s\",\"afk\":%s}}"
+                        , (int)gateway_send_events::UPDATE_PRESENCE, m_since, m_url.size(), m_url.c_str(), m_name.size(), m_name.c_str(), m_state.size(), m_state.c_str(), static_cast<int>(m_type), get_status_str(), m_afk ? "true" : "false"
+                    );
+                }
+                else {
+                    saprintf(m_buf, &len,
+                        "{\"op\":%i,\"d\":{\"since\":%llu,\"activities\":[{\"url\":\"%.*s\",\"name\":\"%.*s\",\"type\":%i}],\"status\":\"%s\",\"afk\":%s}}"
+                        , (int)gateway_send_events::UPDATE_PRESENCE, m_since, m_url.size(), m_url.c_str(), m_name.size(), m_name.c_str(), static_cast<int>(m_type), get_status_str(), m_afk ? "true" : "false"
+                    );
+                }
+                break;
+            case type::GAME:
+            case type::LISTENING:
+            case type::WATCHING:
+            case type::CUSTOM:
+            case type::COMPETING:
+                if (m_state.size() > 0) {
+                    saprintf(m_buf, &len,
+                        "{\"op\":%i,\"d\":{\"since\":%llu,\"activities\":[{\"name\":\"%.*s\",\"state\":\"%.*s\",\"type\":%i}],\"status\":\"%s\",\"afk\":%s}}"
+                        , (int)gateway_send_events::UPDATE_PRESENCE, m_since, m_name.size(), m_name.c_str(), m_state.size(), m_state.c_str(), static_cast<int>(m_type), get_status_str(), m_afk ? "true" : "false"
+                    );
+                }
+                else {
+                    saprintf(m_buf, &len,
+                        "{\"op\":%i,\"d\":{\"since\":%llu,\"activities\":[{\"name\":\"%.*s\",\"type\":%i}],\"status\":\"%s\",\"afk\":%s}}"
+                        , (int)gateway_send_events::UPDATE_PRESENCE, m_since, m_name.size(), m_name.c_str(), static_cast<int>(m_type), get_status_str(), m_afk ? "true" : "false"
+                    );
+                }
+                break;
+            }
+
+            return m_buf;
+        }
+
+
+
+
         GatewayBot::GatewayBot(Gateway& ref)
             : m_gateway(ref)
         {}
         
-        bool GatewayBot::update_presence(const char* name, const char* state, const int type, const char* url)
+        bool GatewayBot::send_command(const gateway_send_events& c, const char* json, size_t len)
+        {
+            if (!json) return false;
+            if (len == 0) len = strlen(json);
+
+            char* buf = nullptr;
+            size_t lenn = 0;
+            
+            saprintf(buf, &lenn,             
+                "{"
+                    "\"op\":%i,"
+                    "\"d\":%.*s"
+                "}", (int)c, len, json
+            );
+
+            //if (buf) ESP_LOGI(TAG, "Sending gateway command: %.*s", lenn, buf);
+            //else     ESP_LOGI(TAG, "Sending empty gateway command?");
+
+            const bool gud = m_gateway.send_raw_json(buf, len);
+            DEL_EM(buf);
+            return gud;
+        }
+        
+        bool GatewayBot::send_presence(GatewayPresence&& gp)
+        {
+            const char* buf = gp.gen();
+            return m_gateway.send_raw_json(buf, strlen(buf));
+        }
+        
+        /*bool GatewayBot::update_presence(const char* name, const char* state, const int type, const char* url)
         {
             char* buf = nullptr;
             size_t len = 0;
 
             if (url) {
                 saprintf(buf, &len, 
-                    "{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i,\"url\":\"%s\"}",
+                    "{\"activities\":[{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i,\"url\":\"%s\"}],\"status\":\"online\",\"afk\":false,\"since\":null}",
                     name, state, type, url
                 );
             }
             else {
                 saprintf(buf, &len, 
-                    "{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i}",
+                    "{\"activities\":[{\"name\":\"%s\",\"state\":\"%s\",\"type\":%i}],\"status\":\"online\",\"afk\":false,\"since\":null}",
                     name, state, type
                 );
             }
-            const bool gud = m_gateway.send_raw_json(buf, len);
+            const bool gud = send_command(gateway_send_events::UPDATE_PRESENCE, buf, len);
             delete[] buf;
             return gud;
         }
+        
+        void GatewayBot::__default_test()
+        {
+            const char* test = "{\"op\": 3,\"d\":{\"since\": 91879201,\"activities\": [{\"name\": \"Save the Oxford Comma\",\"type\": 0}],\"status\": \"online\",\"afk\": false}}";
+            m_gateway.send_raw_json(test, strlen(test));
+        }*/
 
 
         bool Gateway::send_raw_json(const char* str, const size_t len)
@@ -263,7 +441,7 @@ namespace Lunaris {
             if (!m_client_handle) return false;
 #ifndef RELEASE
             {
-                ESP_LOGI(TAG, "\n# GATEWAY SENDING SIZE=%zu DATA=%s", len, str);
+                ESP_LOGI(TAG, "\n# GATEWAY SENDING SIZE=%zu DATA=%.*s", len, len, str);
             }
 #endif
 

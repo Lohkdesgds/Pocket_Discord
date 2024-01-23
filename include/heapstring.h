@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <stdint.h>
 
 class HeapString {
     char* mem = nullptr;
@@ -20,8 +21,18 @@ public:
     HeapString& operator=(const char*) noexcept;
     HeapString& operator+=(const char*) noexcept;
 
-    void set(const char*, size_t);
-    void append(const char*, size_t);
+    void set(const char*, size_t = 0);
+    void append(const char*, size_t = 0);
+
+    void append(const char);
+    bool append(const uint16_t);
+    bool append(const uint32_t);
+    bool append(const uint64_t);
+    bool append(const int16_t);
+    bool append(const int32_t);
+    bool append(const int64_t);
+    bool append(const float);
+    bool append(const double);
 
     size_t size() const;
     void free();

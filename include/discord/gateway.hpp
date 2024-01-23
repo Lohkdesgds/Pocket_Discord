@@ -245,13 +245,53 @@ namespace Lunaris {
 
         class Gateway;
 
+        class GatewayPresence {
+        public:
+            enum class status : uint8_t {ONLINE, DND, IDLE, INVISIBLE, OFFLINE}; // to string later
+            enum class type : uint8_t {GAME = 0, STREAMING = 1, LISTENING = 2, WATCHING = 3, CUSTOM = 4, COMPETING = 5};
+        private:
+            HeapString m_name, m_state, m_url;
+            status m_status = status::ONLINE;
+            char* m_buf = nullptr;
+            bool m_afk = false;
+            type m_type = type::GAME;
+
+            const char* get_status_str() const;
+        public:
+            GatewayPresence() = default;
+
+            GatewayPresence(const GatewayPresence&) = delete;
+            void operator=(const GatewayPresence&) = delete;
+            GatewayPresence(GatewayPresence&&) noexcept;
+            void operator=(GatewayPresence&&) noexcept;
+
+            ~GatewayPresence();
+            
+            GatewayPresence& set_gaming     (const char* name, const char* state);
+            GatewayPresence& set_streaming  (const char* name, const char* state, const char* url);
+            GatewayPresence& set_listening  (const char* name, const char* state);
+            GatewayPresence& set_watching   (const char* name, const char* state);
+            GatewayPresence& set_custom     (const char* name, const char* state);
+            GatewayPresence& set_competing  (const char* name, const char* state);
+
+            GatewayPresence& set_status(const status);
+            GatewayPresence& set_afk(const bool);
+
+            const char* gen();
+        };
+
         // filter malicious or problematic stuff from user on event. Also, pre-do some gateway stuff
         class GatewayBot{
             Gateway& m_gateway;
         public:
             GatewayBot(Gateway&);
 
-            bool update_presence(const char* name, const char* state, const int type, const char* url = nullptr);
+            bool send_command(const gateway_send_events&, const char*, size_t = 0);
+            bool send_presence(GatewayPresence&&);
+
+            //bool update_presence(const char* name, const char* state, const int type, const char* url = nullptr);
+            //
+            //void __default_test();
         };
 
         class Gateway {
